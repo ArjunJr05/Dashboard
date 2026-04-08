@@ -1,0 +1,13 @@
+{
+	"command": "sh run.sh",
+	"build_path": ".",
+	"stack": "python_3_9",
+	"env_variables": {
+		"ENABLE_CATALYST_UPLOAD": "1",
+		"PLAYWRIGHT_BROWSERS_PATH": "/tmp/pw-browsers",
+		"HOME": "/tmp",
+		"XDG_CACHE_HOME": "/tmp/.cache"
+	},
+	"memory": 2048,
+	"scripts": {}
+}

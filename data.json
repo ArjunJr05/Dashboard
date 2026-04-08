@@ -1,0 +1,75 @@
+{
+  "last_updated": "2026-03-31 13:29:07",
+  "appstore": {
+    "rating": 4.7,
+    "rating_count": 19401,
+    "reviews": []
+  },
+  "playstore": {
+    "rating": 4.6,
+    "rating_count": 111857,
+    "reviews": [
+      {
+        "author": "Bhanu Pratap",
+        "body": "Hey Arattai, after sending the message, I'm not getting the double tick for delivery confirmation like WhatsApp, and it's not showing the last seen status even when the internet is on. and not showing app notification message like dot / number fix it very very soon",
+        "rating": 2,
+        "date": "2026-03-30"
+      },
+      {
+        "author": "Anil KrSingh",
+        "body": "I have been using this app almost 7 months. fantastic experience 👏 thanks @arattai_team",
+        "rating": 5,
+        "date": "2026-03-30"
+      },
+      {
+        "author": "pradeep kumar Yadav",
+        "body": "nice",
+        "rating": 5,
+        "date": "2026-03-30"
+      },
+      {
+        "author": "Devang Ramani",
+        "body": "wow now play store not allow to install this app in my mobile zoho team help me to install your app",
+        "rating": 5,
+        "date": "2026-03-30"
+      },
+      {
+        "author": "Saksham Saxena",
+        "body": "It's good and the interface is nice as you are giving the maximum features available on other messaging applications. I create a channel and it's easy and simple to create. I have a suggestion that you have to look for various delete options like (delete for me and delete for everyone) and in channel, if I delete any message, it have to delete from the channel, no history at all. So that, nobody could know that I have deleted any message, because it's embarassing that if I sent irrelevant.",
+        "rating": 5,
+        "date": "2026-03-30"
+      }
+    ]
+  },
+  "google_news": {
+    "posts": [
+      {
+        "title": "A WhatsApp Like Feature Has Arrived in Arattai! Now Your Chats Will Never Be Lost",
+        "body": "India's homegrown messaging app Arattai has taken a big step forward by rolling out a WhatsApp style feature that greatly improves how your chats are stored and secured.",
+        "url": "https://www.indiaherald.com/Breaking/Read/994884876/-A-WhatsApp-Like-Feature-Has-Arrived-in-Arattai-Now-Your-Chats-Will-Never-Be-Lost",
+        "resolved_url": "https://www.indiaherald.com/Breaking/Read/994884876/-A-WhatsApp-Like-Feature-Has-Arrived-in-Arattai-Now-Your-Chats-Will-Never-Be-Lost",
+        "image": "https://www.indiaherald.com/imagestore/images/breaking/134/-a-whatsapp-like-feature-has-arrived-in-arattai-now-your-chats-will-never-be-lost8ec4306e-b990-4355-a4fe-2d1f0d84ad49-415x250-IndiaHerald.jpg",
+        "date": "2026-03-26",
+        "source": "indiaherald.com"
+      },
+      {
+        "title": "Arattai Gets Top Spot in Social Networking Category on App Store",
+        "body": "Homegrown messaging app Arattai has climbed to the top spot in the Social Networking category on the App Store, overtaking major global players.",
+        "url": "https://www.msn.com/en-in/money/news/arattai-swadeshi-messaging-app-takes-the-lead-on-app-store-what-it-is/ar-AA1NuRXm",
+        "resolved_url": "https://www.msn.com/en-in/money/news/arattai-swadeshi-messaging-app-takes-the-lead-on-app-store-what-it-is/ar-AA1NuRXm",
+        "image": "https://img-s-msn-com.akamaized.net/tenant/amp/entityid/AA1NuRXk.img?w=768&h=472&m=4&q=87",
+        "date": "2026-03-26",
+        "source": "MSN"
+      },
+      {
+        "title": "WhatsApp-rival Arattai gets chat-backup feature",
+        "body": "Arattai has rolled out a new chat backup feature on Android and iPhone, enabling users to securely save their messages and media.",
+        "url": "https://www.financialexpress.com/life/technology-whatsapp-rival-arattai-gets-chat-backup-feature-on-android-and-iphone-heres-how-to-enable-and-use-it-safely-4180282/",
+        "resolved_url": "https://www.financialexpress.com/life/technology-whatsapp-rival-arattai-gets-chat-backup-feature-on-android-and-iphone-heres-how-to-enable-and-use-it-safely-4180282/",
+        "image": "https://images.financialexpressdigital.com/2025/10/Arattai_vs_whatsapp_1_1.jpg",
+        "date": "2026-03-22",
+        "source": "The Financial Express"
+      }
+    ]
+  }
+}

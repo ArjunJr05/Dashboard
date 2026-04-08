@@ -1,0 +1,39 @@
+/* ═══════════════════════════════════════════════════
+   ARATTAI — Yellow Sunshine Global Base
+   Primary: #f7d747  |  BG: #fff9eb  |  Font: Puvi
+   ═══════════════════════════════════════════════════ */
+
+@import url('https://fonts.zohostatic.com/puvi/regular/font.css');
+@import url('https://fonts.zohostatic.com/puvi/bold/font.css');
+@import url('https://fonts.zohostatic.com/puvi/semibold/font.css');
+@import url('https://fonts.zohostatic.com/puvi/medium/font.css');
+@import url('https://fonts.zohostatic.com/puvi/extrabold/font.css');
+
+:root {
+  --y-main:  #f7d747;
+  --y-deep:  #e8c200;
+  --y-pale:  #fff9eb;
+  --y-cream: #fffcf0;
+  --ink:     #1A1400;
+  --ink2:    #3D3000;
+  --ink3:    #6B5800;
+
+  font-family: 'Puvi', 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--y-pale);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--y-pale); }
+
+#app {
+  width: 100vw; height: 100vh;
+  display: flex; flex-direction: column;
+  overflow: hidden; position: relative;
+}

@@ -1,0 +1,27 @@
+# Node
+node_modules/
+dist/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# Catalyst / IDE
+.catalystrc
+catalyst.json
+catalyst_appsail/
+.vscode/
+*.zip
+build.log
+
+# Secrets (use docker --env-file or -e flags instead)
+backend/x_session.json
+
+# Logs
+*.log
