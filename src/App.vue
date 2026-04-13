@@ -491,6 +491,13 @@
                   class="xf-left-img" @error="xImageFallback=true" alt="tweet"/>
                 <div v-else class="xf-left-text-block">
                   <div class="xf-left-text">{{ (twitter.recent_posts||[])[twitterIdx]?.body || '' }}</div>
+                  
+                  <!-- Fallback Live Preview if no screenshots/images -->
+                  <div class="xf-fallback-preview">
+                    <img :src="'https://image.thum.io/get/width/1200/noanimate/' + (twitter.recent_posts||[])[twitterIdx]?.url" 
+                         class="xf-fallback-img" alt="live preview" />
+                  </div>
+
                   <div v-if="((twitter.recent_posts||[])[twitterIdx]?.post_images||[]).length"
                     class="xf-post-images">
                     <img v-for="(imgUrl, imgIdx) in (twitter.recent_posts||[])[twitterIdx].post_images"
@@ -1681,7 +1688,24 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 .ns-poster{width:100%;height:100%;position:relative;display:flex;align-items:flex-end;overflow:hidden;}
 .ns-no-image{position:absolute;inset:0;background:linear-gradient(145deg,var(--y-soft),var(--y-main));}
 .ns-hero{position:absolute;inset:0;z-index:0;}
-.ns-hero-img{width:100%;height:100%;object-fit:cover;animation:kb 40s ease-in-out infinite alternate;}
+.xf-fallback-preview {
+  margin-top: 1.5rem;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+.xf-fallback-img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.ns-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: kb 40s ease-in-out infinite alternate;
+}
 @keyframes kb{0%{transform:scale(1);}100%{transform:scale(1.15) translate(20px,10px);}}
 .ns-hero-overlay{position:absolute;inset:0;background:linear-gradient(0deg,rgba(255,252,225,.97) 10%,rgba(255,249,200,.55) 55%,transparent 100%);}
 .ns-content{position:relative;z-index:2;padding:calc(5vh + 92px) 5vh 5vh;width:100%;height:100%;display:flex;flex-direction:column;justify-content:flex-end;}

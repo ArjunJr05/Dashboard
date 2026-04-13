@@ -81,7 +81,8 @@ DATA_FILE    = os.path.join(DATA_DIR, "data.json")
 # ── Session file: prefer env var X_SESSION_JSON, then /tmp, then backend dir ──
 def _get_session_path():
     """Write session JSON from env var to /tmp if available, return path."""
-    env_json = os.environ.get("X_SESSION_JSON", "").strip()
+    # Check X_SESSION_DATA first (Render/Railway unified name), then legacy X_SESSION_JSON
+    env_json = os.environ.get("X_SESSION_DATA", os.environ.get("X_SESSION_JSON", "")).strip()
     if env_json:
         dest = "/tmp/x_session.json"
         try:
@@ -89,7 +90,7 @@ def _get_session_path():
                 f.write(env_json)
             return dest
         except Exception as e:
-            print(f"[twitter-fetcher] WARNING: Could not write X_SESSION_JSON: {e}")
+            print(f"[twitter-fetcher] WARNING: Could not write session data to {dest}: {e}")
     if os.path.exists("/tmp/x_session.json"):
         return "/tmp/x_session.json"
     local = str(_BACKEND_DIR / "x_session.json")
