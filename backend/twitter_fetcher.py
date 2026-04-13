@@ -234,8 +234,8 @@ def _login(page):
     """Robust X login with fallback to guest view."""
     try:
         log.info("Navigating to X login flow ...")
-        page.goto("https://x.com/i/flow/login", wait_until="domcontentloaded", timeout=90000)
-        time.sleep(5)
+        page.goto("https://x.com/i/flow/login", wait_until="domcontentloaded", timeout=60000)
+        time.sleep(6)
 
         log.info("Attempting standard email/password login ...")
         
@@ -800,30 +800,20 @@ def fetch_twitter_data():
 
         # Try going directly to profile — if session is valid, login is skipped
         log.info(f"Navigating to {X_PROFILE} to check session ...")
-        try:
-            page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=90000)
-            time.sleep(5)
-        except Exception as e:
-            log.warning(f"Initial profile check timed out: {e}. Trying once more...")
-            page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=90000)
-            time.sleep(5)
+        page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=40000)
+        time.sleep(5)
 
         if _is_logged_in(page):
             log.info("Session valid — skipping login ✓")
         else:
             log.info("Session expired or missing — logging in fresh ...")
-            # Increase login timeout as well
-            try:
-                logged_in = _login(page) # _login should have its own internal timeout logic
-                if logged_in:
-                    _save_session(context)
-                log.info(f"Navigating to {X_PROFILE} ...")
-                page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=90000)
-                time.sleep(5)
-            except Exception as login_err:
-                log.error(f"Login or post-login navigation failed: {login_err}")
-                browser.close()
-                return _empty_twitter()
+            logged_in = _login(page)
+            if logged_in:
+                _save_session(context)  # Save for next run
+            # Navigate to profile after login
+            log.info(f"Navigating to {X_PROFILE} ...")
+            page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=40000)
+            time.sleep(5)
 
         # Extract profile follower count for overview dashboard
         followers_text, followers_count = _extract_followers(page)
@@ -980,31 +970,6 @@ def fetch_twitter_data():
                         page.screenshot(path=shot_path, full_page=False)
 
                 screenshot_paths.append(shot_path if os.path.exists(shot_path) else "")
-                
-                # UPLOAD TO CATALYST FILE STORE (Persistent Storage)
-                if os.path.exists(shot_path):
-                    try:
-                        from zcatalyst_sdk import catalyst
-                        import traceback
-                        # Diagnostic: check if catalyst is already initialized
-                        try:
-                            cat_app = catalyst.initialize()
-                        except:
-                            # If it fails, it usually needs credentials on Render
-                            cat_app = None
-
-                        if cat_app:
-                            filestore = cat_app.file_store()
-                            folder = filestore.folder("28618000000101001")
-                            log.info(f"[catalyst] Attempting upload: {shot_path}")
-                            # Overwrite logic
-                            result = folder.upload_file(shot_path)
-                            log.info(f"✓ Screenshot {count} stored in Catalyst Cloud! ID: {result.id}")
-                        else:
-                            log.error("[catalyst] SDK Init Failed — NO CREDENTIALS FOUND. Please set CATALYST_PROJECT_ID and CATALYST_PROJECT_KEY in Render Env Vars.")
-                    except Exception:
-                        log.error(f"[catalyst] Upload failed for {shot_path}:")
-                        log.error(traceback.format_exc())
             except Exception as e:
                 log.warning(f"Screenshot {count} failed: {e}")
                 screenshot_paths.append("")
