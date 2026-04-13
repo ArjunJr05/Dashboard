@@ -5,6 +5,7 @@ Serves the dashboard as static files and runs two background schedulers:
   2. Twitter screenshotter (Playwright + Catalyst upload)  — every 15 min
 """
 
+import os
 import threading
 import time
 import logging
@@ -368,7 +369,7 @@ def x_session_login():
             "5. Session will be saved automatically",
             "6. Screenshots will be captured on first fetch",
         ],
-        "session_file": str(session_file),
+        "session_file": str(SESSION_FILE),
         "check_status_url": "/x-session/status",
         "trigger_fetch_url": "/trigger-twitter",
         "time": now(),
