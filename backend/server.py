@@ -271,6 +271,16 @@ def x_session_login():
     
     session_file = Path(BASE_DIR) / "x_session.json"
     
+    # ── Twitter Session Management (Secure) ───────────────────────
+    X_SESSION_DATA = os.getenv("X_SESSION_DATA")
+    if X_SESSION_DATA:
+        try:
+            with open(session_file, "w") as f:
+                f.write(X_SESSION_DATA)
+            print(f"[inf] Restored X session from environment variable to {session_file}")
+        except Exception as e:
+            print(f"[err] Failed to restore X session from ENV: {e}")
+    
     # Check if already logged in with valid session
     if _validate_session_file():
         return jsonify({
