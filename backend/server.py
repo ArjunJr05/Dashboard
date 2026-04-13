@@ -29,10 +29,24 @@ except ImportError as _te:
 from ai_review_analysis import analysis_bp
 
 # ── Flask app ─────────────────────────────────────────────
-BASE_DIR   = Path(__file__).resolve().parent
-PUBLIC_DIR = BASE_DIR / "public"
+# Determine Base Directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PUBLIC_DIR = os.path.join(BASE_DIR, "public")
+DATA_FILE = os.path.join(PUBLIC_DIR, "data.json")
+SESSION_FILE = os.path.join(BASE_DIR, "x_session.json")
 
-app = Flask(__name__, static_folder=str(PUBLIC_DIR), static_url_path="")
+# ── Twitter Session Management (Secure - Runs BEFORE Scraping Starts) ──
+X_SESSION_DATA = os.getenv("X_SESSION_DATA")
+if X_SESSION_DATA:
+    try:
+        # Ensure directory exists (usually base_dir does)
+        with open(SESSION_FILE, "w") as f:
+            f.write(X_SESSION_DATA)
+        print(f"[inf] [Secure] Successfully restored X session from ENV to {SESSION_FILE}")
+    except Exception as e:
+        print(f"[err] [Secure] Failed to restore X session from ENV: {e}")
+
+app = Flask(__name__, static_folder="public", static_url_path="")
 CORS(app)
 app.register_blueprint(analysis_bp)
 
@@ -268,25 +282,12 @@ def x_session_login():
     from pathlib import Path
     from twitter_fetcher import _validate_session_file, _save_session, run_twitter_cycle
     import json as json_lib
-    
-    session_file = Path(BASE_DIR) / "x_session.json"
-    
-    # ── Twitter Session Management (Secure) ───────────────────────
-    X_SESSION_DATA = os.getenv("X_SESSION_DATA")
-    if X_SESSION_DATA:
-        try:
-            with open(session_file, "w") as f:
-                f.write(X_SESSION_DATA)
-            print(f"[inf] Restored X session from environment variable to {session_file}")
-        except Exception as e:
-            print(f"[err] Failed to restore X session from ENV: {e}")
-    
     # Check if already logged in with valid session
     if _validate_session_file():
         return jsonify({
             "status": "already_logged_in",
             "message": "✓ Valid session exists. Ready to fetch posts.",
-            "session_file": str(session_file),
+            "session_file": str(SESSION_FILE),
             "next_action": "Visit /trigger-twitter to fetch and screenshot posts",
         }), 200
     
