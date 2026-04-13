@@ -33,7 +33,12 @@ from ai_review_analysis import analysis_bp
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 DATA_FILE = os.path.join(PUBLIC_DIR, "data.json")
-SESSION_FILE = os.path.join(BASE_DIR, "x_session.json")
+
+# ── Unified Session File Path (Matches twitter_fetcher.py) ────
+if os.name == "nt":
+    SESSION_FILE = os.path.join(BASE_DIR, "x_session.json")
+else:
+    SESSION_FILE = "/tmp/x_session.json"
 
 # ── Twitter Session Management (Secure - Runs BEFORE Scraping Starts) ──
 X_SESSION_DATA = os.getenv("X_SESSION_DATA")
