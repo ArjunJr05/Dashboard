@@ -301,8 +301,7 @@ def _login(page):
             return False
 
         # Verify login success
-        # Give the server 30s to pass Render healthchecks before starting heavy browser tasks
-    time.sleep(30)
+        time.sleep(5)
         if _is_logged_in(page) or "/home" in page.url.lower():
             log.info("✓ Login successful")
             return True
