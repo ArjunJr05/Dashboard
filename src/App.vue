@@ -51,11 +51,6 @@
               <img :src="cur===1?'/ios.png':'/android.png'" class="ss-badge-img-sm" />
               <div class="ss-badge-name">{{ cur===1?'App Store':'Play Store' }} <span class="ss-rating-sm">{{ cur===1?ios.rating:android.rating }}</span></div>
             </div>
-            <div class="ss-slide-counter tb-counter">
-              <span class="ss-sc-cur">{{ cur===1?(iosRevIdxInGroup+1):(andRevIdxInGroup+1) }}</span>
-              <span class="ss-sc-sep">/</span>
-              <span class="ss-sc-tot">{{ cur===1?(iosSentimentGroups[currentIosSentiment.key]?.length||0):(andSentimentGroups[currentAndSentiment.key]?.length||0) }}</span>
-            </div>
           </div>
         </transition>
       </div>
@@ -517,39 +512,24 @@
           <!-- Right: sentiment cluster grid of comments -->
           <div class="xf-right-comments">
             <div class="xf-comments-header">
-              <span class="xf-right-eyebrow">COMMENT PULSE</span>
-              <span class="xf-right-count">{{ xActiveCommentCount }} sentiment{{ xActiveCommentCount!==1?'s':'' }} detected</span>
+              <span class="xf-right-eyebrow">💬 COMMENTS</span>
+              <span class="xf-right-count">{{ currentTwitterComments.length }} replies</span>
             </div>
-            <div class="bubble-grid" :data-active="xActiveCommentCount">
-              <template v-for="s in sentimentOrder" :key="'xc-node-'+s.key">
-                <div
-                  v-if="(xCommentSentimentGroups[s.key]||[]).length > 0"
-                  class="bc-cluster"
-                  :style="{'--sc': s.color}"
-                >
-                  <div class="bc-sent-name">{{ s.label }}</div>
-                  <div class="bc-hub">
-                    <div class="bc-hub-glow"></div>
-                    <div class="bc-hub-ring"></div>
-                    <EmotionFace :emotionKey="s.key" class="bc-emoji" />
-                  </div>
-                  <div class="bc-bubbles" :data-count="(xCommentSentimentGroups[s.key]||[]).length">
-                    <div
-                      v-for="(comment, bIdx) in (xCommentSentimentGroups[s.key]||[]).slice(0,5)"
-                      :key="'xc-b-'+s.key+bIdx"
-                      class="bc-bubble"
-                    >
-                      <div class="bcb-header">
-                        <div class="bcb-avatar" :style="{'background': s.color}">{{ (comment.author||'U')[0].toUpperCase() }}</div>
-                        <div class="bcb-header-meta">
-                          <span class="bcb-author">{{ comment.author||'User' }}</span>
-                        </div>
-                      </div>
-                      <div class="bcb-text">{{ comment.body }}</div>
-                    </div>
-                  </div>
+            <div class="xf-comments-list">
+              <div
+                v-for="(comment, idx) in currentTwitterComments"
+                :key="'xc-'+twitterIdx+'-'+idx"
+                class="xf-comment-item"
+              >
+                <div class="xfc-avatar">{{ (comment.author||'U')[0].toUpperCase() }}</div>
+                <div class="xfc-content">
+                  <div class="xfc-author">{{ comment.author }}</div>
+                  <div class="xfc-body">{{ comment.body }}</div>
                 </div>
-              </template>
+              </div>
+              <div v-if="!currentTwitterComments.length" class="xf-no-comments">
+                No comments yet
+              </div>
             </div>
           </div>
 
@@ -855,18 +835,9 @@ const xFollowersText = computed(() => {
 const twitterIdx = ref(0), xCommentIdx = ref(0), xImageFallback = ref(false)
 let twitterLoopTimeout = null, commentLoopTimeout = null
 
-const xCommentSentimentGroups = computed(() => {
-  const comments = ((twitter.value.recent_posts||[])[twitterIdx.value]?.comments) || []
-  const groups = {}
-  sentimentOrder.forEach(s => { groups[s.key] = [] })
-  comments.forEach(c => {
-    const sent = (c.sentiment || 'neutral').toLowerCase()
-    const key = Object.keys(groups).includes(sent) ? sent : 'neutral'
-    groups[key].push(c)
-  })
-  return groups
+const currentTwitterComments = computed(() => {
+  return ((twitter.value.recent_posts||[])[twitterIdx.value]?.comments) || []
 })
-const xActiveCommentCount = computed(() => Object.values(xCommentSentimentGroups.value).filter(g => g.length > 0).length)
 
 watch(twitterIdx,()=>{xImageFallback.value=false;xCommentIdx.value=0})
 
@@ -1868,6 +1839,85 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 .xf-dot.active{background:#1DA1F2;width:24px;border-radius:4px;box-shadow:0 0 8px rgba(29,161,242,.5);}
 .xf-right-eyebrow{font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:#1DA1F2;}
 .xf-right-count{font-family:var(--font-b);font-size:12px;color:var(--ink3);}
+
+/* Simple comment list (no sentiment clustering) */
+.xf-comments-list {
+  flex: 1;
+  overflow: hidden;
+  padding: 10px 18px 20px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 15px;
+}
+/* If exactly 5 comments, make the 5th one span both columns to fill the gap */
+.xf-comments-list > .xf-comment-item:nth-child(5):last-child {
+  grid-column: span 2;
+}
+.xf-comment-item {
+  display: flex;
+  gap: 14px;
+  padding: 1.2rem 1.4rem;
+  background: #fff;
+  border: 1px solid rgba(206,171,57,0.15);
+  border-radius: 20px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+  height: 100%;
+  align-items: center;
+}
+.xf-comment-item:hover {
+  background: var(--y-cream);
+  transform: translateX(4px);
+  border-color: var(--y-main);
+}
+.xfc-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1DA1F2, #0A7BC5);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-d);
+  font-size: 14px;
+  font-weight: 900;
+  flex-shrink: 0;
+  box-shadow: 0 3px 8px rgba(29,161,242,0.22);
+}
+.xfc-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.xfc-author {
+  font-family: var(--font-d);
+  font-size: 16px;
+  font-weight: 850;
+  color: var(--ink);
+  line-height: 1;
+}
+.xfc-body {
+  font-family: var(--font-b);
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink2);
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.xf-no-comments {
+  text-align: center;
+  padding: 3rem;
+  font-family: var(--font-b);
+  font-size: 14px;
+  color: rgba(255,255,255,0.3);
+  font-style: italic;
+}
 /* ═══════════════════════════════════════════════════════════════
    BUBBLE CLUSTER LAYOUT  (Slides 1 & 2)
    Matches reference image: emoji hub centered, speech-bubble
@@ -1906,7 +1956,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 .bc-cluster {
   position: relative;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr;
   grid-template-columns: 1fr;
   align-items: center;
   justify-items: center;
@@ -1951,13 +2001,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 /* ── Sentiment label above hub ── */
 .bc-sent-name {
   font-family: var(--font-d);
-  font-size: clamp(12px, 1.4vw, 18px);
-  font-weight: 900;
+  font-size: clamp(14px, 1.6vw, 22px);
+  font-weight: 950;
   color: var(--sc);
   letter-spacing: 0.04em;
   text-align: center;
   text-shadow: 0 1px 6px rgba(0,0,0,0.08);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   z-index: 2;
   white-space: nowrap;
 }
@@ -1968,15 +2018,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(60px, 8vw, 110px);
-  height: clamp(60px, 8vw, 110px);
+  width: clamp(40px, 4.5vw, 65px);
+  height: clamp(40px, 4.5vw, 65px);
   flex-shrink: 0;
   z-index: 2;
+  margin-bottom: 4px;
 }
 
 .bc-hub-glow {
   position: absolute;
-  inset: -20px;
+  inset: -12px;
   border-radius: 50%;
   background: radial-gradient(circle, var(--sc, #aaa) 0%, transparent 70%);
   opacity: 0.35;
@@ -2104,14 +2155,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 
 .bcb-text {
   font-family: var(--font-b);
-  font-size: clamp(12px, 1.3vw, 17px);
+  font-size: clamp(13px, 1.4vw, 19px);
   font-weight: 600;
   color: var(--ink);
-  line-height: 1.5;
+  line-height: 1.4;
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 5;
 }
 
 /* Warm scene bg for slides 1 & 2 — matches overview palette #fff9eb */

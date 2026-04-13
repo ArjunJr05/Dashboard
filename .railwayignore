@@ -1,0 +1,65 @@
+# Railway Ignore — keeps upload small to prevent timeout
+
+# ── Node ──────────────────────────────────────────────────
+node_modules/
+node_modules
+npm-debug.log*
+
+# ── Python virtualenvs (ALL locations) ───────────────────
+.venv/
+.venv
+venv/
+venv
+env/
+backend/.venv/
+backend/.venv
+*/.venv/
+*/.venv
+
+# ── Python cache ─────────────────────────────────────────
+__pycache__/
+__pycache__
+*/__pycache__/
+*/__pycache__
+backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ── Build artifacts ───────────────────────────────────────
+dist/
+dist
+dist-ssr/
+.cache/
+client/
+public/dist/
+
+# ── Logs ─────────────────────────────────────────────────
+*.log
+build.log
+
+# ── Git & IDE ─────────────────────────────────────────────
+.git/
+.git
+.vscode/
+.idea/
+.gemini/
+
+# ── Catalyst ─────────────────────────────────────────────
+.catalystrc
+catalyst.json
+catalyst_appsail/
+
+# ── Binary / archive files ────────────────────────────────
+*.zip
+*.tar
+*.tar.gz
+*.gz
+*.exe
+*.bin
+
+# ── Large runtime-generated data (fetched fresh on start) ─
+data.json
+backend/data.json
+
+# NOTE: backend/x_session.json is intentionally included — needed at startup

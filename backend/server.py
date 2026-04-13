@@ -245,6 +245,7 @@ def trigger_fetch():
 
 # ── Global thread lock for Twitter to prevent duplicates ─
 _TWITTER_BUSY = False
+_TWITTER_LOCK = threading.Lock()
 
 @app.route("/x-session/status")
 def x_session_status():
@@ -345,12 +346,11 @@ def x_session_login():
         "message": "✓ Browser window will open in 2-3 seconds. Please log in to X.",
         "instructions": [
             "1. A browser window will open shortly",
-            "2. Email or username: arattaitv@gmail.com",
-            "3. Password: Arattai@2006",
-            "4. Complete all login steps (including 2FA if prompted)",
-            "5. Wait for browser to auto-close (~3 minutes timeout)",
-            "6. Session will be saved automatically",
-            "7. Screenshots will be captured on first fetch",
+            "2. Log in with your X account credentials",
+            "3. Complete all login steps (including 2FA if prompted)",
+            "4. Wait for browser to auto-close (~3 minutes timeout)",
+            "5. Session will be saved automatically",
+            "6. Screenshots will be captured on first fetch",
         ],
         "session_file": str(session_file),
         "check_status_url": "/x-session/status",
@@ -378,20 +378,22 @@ def trigger_twitter():
     if not _TWITTER_AVAIL:
         return jsonify({"status": "error", "message": "twitter_fetcher not available"}), 503
     
-    if _TWITTER_BUSY:
-        return jsonify({
-            "status": "already_running",
-            "message": "Twitter fetch already in progress. Please wait for current cycle to finish.",
-            "time": now()
-        }), 429
+    with _TWITTER_LOCK:
+        if _TWITTER_BUSY:
+            return jsonify({
+                "status": "already_running",
+                "message": "Twitter fetch already in progress. Please wait for current cycle to finish.",
+                "time": now()
+            }), 429
+        _TWITTER_BUSY = True
         
     def _manual_wrapper():
         global _TWITTER_BUSY
         try:
-            _TWITTER_BUSY = True
             run_twitter_cycle()
         finally:
-            _TWITTER_BUSY = False
+            with _TWITTER_LOCK:
+                _TWITTER_BUSY = False
 
     thread = threading.Thread(target=_manual_wrapper, daemon=True)
     thread.start()

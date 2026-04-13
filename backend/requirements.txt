@@ -4,6 +4,7 @@ requests
 beautifulsoup4
 schedule
 google-play-scraper
+app_store_scraper
 gunicorn
 playwright
 zcatalyst-sdk
