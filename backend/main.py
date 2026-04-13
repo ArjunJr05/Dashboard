@@ -21,7 +21,8 @@ def _background_setup():
     """Runs after Flask is listening — waits for Playwright, copies session, starts schedulers."""
     import time
     import glob
-    time.sleep(3)
+    # Give the server 30s to pass Render healthchecks before starting heavy browser tasks
+    time.sleep(30)
 
     # Wait for the actual Chromium binary to exist (max 8 minutes)
     # Do NOT rely on /tmp/pw-ready flag — check for the real executable

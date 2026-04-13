@@ -301,7 +301,8 @@ def _login(page):
             return False
 
         # Verify login success
-        time.sleep(3)
+        # Give the server 30s to pass Render healthchecks before starting heavy browser tasks
+    time.sleep(30)
         if _is_logged_in(page) or "/home" in page.url.lower():
             log.info("✓ Login successful")
             return True
@@ -777,10 +778,12 @@ def fetch_twitter_data():
                 "--disable-blink-features=AutomationControlled",
                 "--memory-pressure-off",
                 "--js-flags=--max-old-space-size=256",
+                "--single-process", # Crucial for 512MB RAM
             ],
         )
+        # Use a smaller viewport to save RAM
         context = browser.new_context(
-            viewport={"width": 1280, "height": 900},
+            viewport={"width": 1024, "height": 768},
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -907,9 +910,10 @@ def fetch_twitter_data():
         originals = sorted(originals, key=lambda x: x.get("datetime", ""), reverse=True)
         reposts = sorted(reposts, key=lambda x: x.get("datetime", ""), reverse=True)
 
-        selected = originals[:5]
-        if len(selected) < 5:
-            need = 5 - len(selected)
+        # Limit to 3 tweets to avoid OOM on 512MB RAM
+        selected = originals[:3]
+        if len(selected) < 3:
+            need = 3 - len(selected)
             selected.extend(reposts[:need])
 
         # If account timeline appears stale, fill with recent live mentions.
