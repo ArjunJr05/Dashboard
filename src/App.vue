@@ -821,14 +821,10 @@ const allRevs = computed(() => [...(ios.value.reviews||[]),...(android.value.rev
 const totalSignals = computed(() => allRevs.value.length + (gnews.value.posts?.length || 0) + (twitter.value.recent_posts?.length || 0))
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
-function apiUrl(path = '') {
-  if (!path) return API_BASE
-  if (/^data:/i.test(path)) return path
-  if (/^https?:\/\//i.test(path)) return path
-  const base = API_BASE.replace(/\/$/, '')
-  if (base === '/api' && path.startsWith('/api/')) return path
-  const cleanPath = path.startsWith('/') ? path : `/${path}`
-  return `${base}${cleanPath}`
+const apiUrl = (p) => {
+  if (!p) return ''
+  if (p.startsWith('http')) return p
+  return (p.startsWith('/') ? '' : '/') + p
 }
 
 const xFollowersText = computed(() => {
