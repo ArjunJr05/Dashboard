@@ -29,28 +29,26 @@ except ImportError as _te:
 # ── Import AI review analysis blueprint ──────────────────
 from ai_review_analysis import analysis_bp
 
-# ── Flask app ─────────────────────────────────────────────
-# Determine Base Directory
+# ── Directory Setup ──
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
-DATA_FILE = os.path.join(PUBLIC_DIR, "data.json")
 
-# ── Unified Session File Path (Matches twitter_fetcher.py) ────
 if os.name == "nt":
+    DATA_DIR = str(BASE_DIR)
     SESSION_FILE = os.path.join(BASE_DIR, "x_session.json")
 else:
+    DATA_DIR = "/tmp"
     SESSION_FILE = "/tmp/x_session.json"
 
-# ── Twitter Session Management (Secure - Runs BEFORE Scraping Starts) ──
+# ── Twitter Session Restoration ──
 X_SESSION_DATA = os.getenv("X_SESSION_DATA")
 if X_SESSION_DATA:
     try:
-        # Ensure directory exists (usually base_dir does)
         with open(SESSION_FILE, "w") as f:
             f.write(X_SESSION_DATA)
-        print(f"[inf] [Secure] Successfully restored X session from ENV to {SESSION_FILE}")
+        print(f"[inf] [Secure] Restored X session to {SESSION_FILE}")
     except Exception as e:
-        print(f"[err] [Secure] Failed to restore X session from ENV: {e}")
+        print(f"[err] [Secure] Failed to restore X session: {e}")
 
 app = Flask(__name__, static_folder="public", static_url_path="")
 CORS(app)
@@ -59,13 +57,8 @@ app.register_blueprint(analysis_bp)
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-import os
 import json
 import base64
-if os.name == "nt":
-    DATA_DIR = str(BASE_DIR)
-else:
-    DATA_DIR = "/tmp"
 
 # ── Routes ────────────────────────────────────────────────
 @app.route("/")
@@ -84,26 +77,29 @@ def data_json():
 @app.route("/data/<path:filename>")
 def serve_backend_files(filename):
     """Serve screenshots or other backend-generated files."""
+    # Prioritize /tmp on Linux, or BASE_DIR on Windows
     disk_path = os.path.join(DATA_DIR, filename)
     if os.path.exists(disk_path):
         return send_from_directory(DATA_DIR, filename)
 
-    # Fallback: serve inline screenshot/image data saved in data.json by twitter_fetcher.
+    # Fallback: serve inline base64 data from data.json
     try:
         data_path = os.path.join(DATA_DIR, "data.json")
         if os.path.exists(data_path):
             with open(data_path, "r", encoding="utf-8") as fh:
-                payload = json.load(fh) if fh else {}
-            inline_map = ((payload or {}).get("twitter") or {}).get("inline_screenshots") or {}
+                payload = json.load(fh)
+            
+            # The structure is twitter -> inline_screenshots
+            tw = payload.get("twitter", {})
+            inline_map = tw.get("inline_screenshots", {})
             data_url = inline_map.get(filename, "")
+            
             if isinstance(data_url, str) and data_url.startswith("data:image/"):
-                # Support both PNG screenshots and JPG post images
-                mime = "image/png" if ".png" in filename else "image/jpeg"
+                mime = "image/png" if ".png" in filename.lower() else "image/jpeg"
                 b64 = data_url.split(",", 1)[1]
-                raw = base64.b64decode(b64)
-                return Response(raw, mimetype=mime)
-    except Exception:
-        pass
+                return Response(base64.b64decode(b64), mimetype=mime)
+    except Exception as e:
+        log.error(f"[server] Inline serve failed for {filename}: {e}")
 
     return jsonify({"error": "file not found", "file": filename}), 404
 
