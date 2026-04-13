@@ -88,13 +88,20 @@ def _get_session_path():
             data = json.loads(env_json)
             
             # --- Auto-cleaning for Chrome Extension exports ---
-            # If it's a wrapper object with 'cookies' key inside
             if isinstance(data, dict) and "cookies" in data:
                 cookies = data["cookies"]
-                # Convert 'expirationDate' to 'expires' for Playwright
                 for c in cookies:
+                    # 1. Fix expiration key
                     if "expirationDate" in c:
                         c["expires"] = c.pop("expirationDate")
+                    
+                    # 2. Fix sameSite values (Playwright only allows Strict, Lax, or None)
+                    ss = str(c.get("sameSite", "")).lower()
+                    if ss in ["lax", "strict", "none"]:
+                        c["sameSite"] = ss.capitalize()
+                    else:
+                        c["sameSite"] = "None" # Default fallback
+                
                 # Wrap it back in the format Playwright expects
                 data = {"cookies": cookies, "origins": []}
             
