@@ -975,14 +975,26 @@ def fetch_twitter_data():
                 if os.path.exists(shot_path):
                     try:
                         from zcatalyst_sdk import catalyst
-                        app = catalyst.initialize()
-                        filestore = app.file_store()
-                        folder = filestore.folder("28618000000101001")
-                        # Overwrite if exists
-                        folder.upload_file(shot_path)
-                        log.info(f"✓ Screenshot {count} uploaded to Catalyst File Store")
-                    except Exception as e:
-                        log.warning(f"Catalyst upload failed for {shot_path}: {e}")
+                        import traceback
+                        # Diagnostic: check if catalyst is already initialized
+                        try:
+                            cat_app = catalyst.initialize()
+                        except:
+                            # If it fails, it usually needs credentials on Render
+                            cat_app = None
+
+                        if cat_app:
+                            filestore = cat_app.file_store()
+                            folder = filestore.folder("28618000000101001")
+                            log.info(f"[catalyst] Attempting upload: {shot_path}")
+                            # Overwrite logic
+                            result = folder.upload_file(shot_path)
+                            log.info(f"✓ Screenshot {count} stored in Catalyst Cloud! ID: {result.id}")
+                        else:
+                            log.error("[catalyst] SDK Init Failed — NO CREDENTIALS FOUND. Please set CATALYST_PROJECT_ID and CATALYST_PROJECT_KEY in Render Env Vars.")
+                    except Exception:
+                        log.error(f"[catalyst] Upload failed for {shot_path}:")
+                        log.error(traceback.format_exc())
             except Exception as e:
                 log.warning(f"Screenshot {count} failed: {e}")
                 screenshot_paths.append("")
