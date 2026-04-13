@@ -970,6 +970,19 @@ def fetch_twitter_data():
                         page.screenshot(path=shot_path, full_page=False)
 
                 screenshot_paths.append(shot_path if os.path.exists(shot_path) else "")
+                
+                # UPLOAD TO CATALYST FILE STORE (Persistent Storage)
+                if os.path.exists(shot_path):
+                    try:
+                        from zcatalyst_sdk import catalyst
+                        app = catalyst.initialize()
+                        filestore = app.file_store()
+                        folder = filestore.folder("28618000000101001")
+                        # Overwrite if exists
+                        folder.upload_file(shot_path)
+                        log.info(f"✓ Screenshot {count} uploaded to Catalyst File Store")
+                    except Exception as e:
+                        log.warning(f"Catalyst upload failed for {shot_path}: {e}")
             except Exception as e:
                 log.warning(f"Screenshot {count} failed: {e}")
                 screenshot_paths.append("")

@@ -82,14 +82,13 @@ def serve_backend_files(filename):
     if os.path.exists(disk_path):
         return send_from_directory(DATA_DIR, filename)
 
-    # Fallback: serve inline base64 data from data.json
+    # Fallback 1: serve inline base64 data from data.json
     try:
         data_path = os.path.join(DATA_DIR, "data.json")
         if os.path.exists(data_path):
             with open(data_path, "r", encoding="utf-8") as fh:
                 payload = json.load(fh)
             
-            # The structure is twitter -> inline_screenshots
             tw = payload.get("twitter", {})
             inline_map = tw.get("inline_screenshots", {})
             data_url = inline_map.get(filename, "")
@@ -98,8 +97,27 @@ def serve_backend_files(filename):
                 mime = "image/png" if ".png" in filename.lower() else "image/jpeg"
                 b64 = data_url.split(",", 1)[1]
                 return Response(base64.b64decode(b64), mimetype=mime)
+
+        # Fallback 2: Fetch from Catalyst File Store (Persistence)
+        try:
+            from zcatalyst_sdk import catalyst
+            # For server environment, catalyst.initialize() usually works if env vars are present
+            cat_app = catalyst.initialize()
+            filestore = cat_app.file_store()
+            folder = filestore.folder("28618000000101001")
+            
+            # Note: Filestore download usually needs the File ID, 
+            # but we can try to find it by name or handle errors.
+            details = folder.get_file_details(filename)
+            if details:
+                content = folder.download_file(details.id)
+                mime = "image/png" if ".png" in filename.lower() else "image/jpeg"
+                return Response(content, mimetype=mime)
+        except Exception as inner_e:
+            log.debug(f"Catalyst Filestore fallback skipped for {filename}: {inner_e}")
+
     except Exception as e:
-        log.error(f"[server] Inline serve failed for {filename}: {e}")
+        log.error(f"[server] Fallback failed for {filename}: {e}")
 
     return jsonify({"error": "file not found", "file": filename}), 404
 
