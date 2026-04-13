@@ -482,15 +482,15 @@
             <div class="xf-left-label">
               <div class="xf-left-eyebrow">LATEST POST</div>
               <div class="xf-left-handle">@Arattai</div>
-              <div class="xf-left-date">{{ (twitter.recent_posts||[])[twitterIdx]?.date || '' }}</div>
+              <div class="xf-left-date">{{ (twitter.recent_posts||[]).slice(0,3)[twitterIdx]?.date || '' }}</div>
             </div>
             <transition name="xf-pop" mode="out-in">
               <div class="xf-left-shot" :key="'left-'+twitterIdx">
-                <img v-if="(twitter.recent_posts||[])[twitterIdx]?.screenshot_url && !xImageFallback"
-                  :src="apiUrl((twitter.recent_posts||[])[twitterIdx].screenshot_url)"
+                <img v-if="(twitter.recent_posts||[]).slice(0,3)[twitterIdx]?.screenshot_url && !xImageFallback"
+                  :src="apiUrl((twitter.recent_posts||[]).slice(0,3)[twitterIdx].screenshot_url)"
                   class="xf-left-img" @error="xImageFallback=true" alt="tweet"/>
                 <div v-else class="xf-left-text-block">
-                  <div class="xf-left-text">{{ (twitter.recent_posts||[])[twitterIdx]?.body || '' }}</div>
+                  <div class="xf-left-text">{{ (twitter.recent_posts||[]).slice(0,3)[twitterIdx]?.body || '' }}</div>
                   
                   <!-- Fallback Live Preview if no screenshots/images -->
                   <div class="xf-fallback-preview">
@@ -498,9 +498,9 @@
                          class="xf-fallback-img" alt="live preview" />
                   </div>
 
-                  <div v-if="((twitter.recent_posts||[])[twitterIdx]?.post_images||[]).length"
+                  <div v-if="((twitter.recent_posts||[]).slice(0,3)[twitterIdx]?.post_images||[]).length"
                     class="xf-post-images">
-                    <img v-for="(imgUrl, imgIdx) in (twitter.recent_posts||[])[twitterIdx].post_images"
+                    <img v-for="(imgUrl, imgIdx) in (twitter.recent_posts||[]).slice(0,3)[twitterIdx].post_images"
                       :key="'postimg-'+twitterIdx+'-'+imgIdx"
                       :src="apiUrl(imgUrl)"
                       class="xf-post-img"
@@ -511,7 +511,7 @@
               </div>
             </transition>
             <div class="xf-dots">
-              <span v-for="(p,pi) in (twitter.recent_posts||[])" :key="pi"
+              <span v-for="(p,pi) in (twitter.recent_posts||[]).slice(0,3)" :key="pi"
                 class="xf-dot" :class="{active: pi===twitterIdx}" @click="twitterIdx=pi"></span>
             </div>
           </div>
@@ -956,7 +956,7 @@ function scheduleNextNews(){clearTimeout(newsLoopTimeout);const posts=visibleNew
 
 function scheduleNextTwitter(){
   clearTimeout(twitterLoopTimeout);clearTimeout(commentLoopTimeout)
-  const posts=twitter.value.recent_posts||[];if(!posts.length)return
+  const posts=(twitter.value.recent_posts||[]).slice(0,3);if(!posts.length)return
   // Advance by post every ~12s (enough to read comments)
   twitterLoopTimeout=setTimeout(()=>{
     twitterIdx.value=(twitterIdx.value+1)%posts.length
