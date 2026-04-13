@@ -81,16 +81,29 @@ DATA_FILE    = os.path.join(DATA_DIR, "data.json")
 # ── Session file: prefer env var X_SESSION_JSON, then /tmp, then backend dir ──
 def _get_session_path():
     """Write session JSON from env var to /tmp if available, return path."""
-    # Check X_SESSION_DATA first (Render/Railway unified name), then legacy X_SESSION_JSON
     env_json = os.environ.get("X_SESSION_DATA", os.environ.get("X_SESSION_JSON", "")).strip()
     if env_json:
         dest = "/tmp/x_session.json"
         try:
+            data = json.loads(env_json)
+            
+            # --- Auto-cleaning for Chrome Extension exports ---
+            # If it's a wrapper object with 'cookies' key inside
+            if isinstance(data, dict) and "cookies" in data:
+                cookies = data["cookies"]
+                # Convert 'expirationDate' to 'expires' for Playwright
+                for c in cookies:
+                    if "expirationDate" in c:
+                        c["expires"] = c.pop("expirationDate")
+                # Wrap it back in the format Playwright expects
+                data = {"cookies": cookies, "origins": []}
+            
             with open(dest, "w") as f:
-                f.write(env_json)
+                json.dump(data, f)
             return dest
         except Exception as e:
-            print(f"[twitter-fetcher] WARNING: Could not write session data to {dest}: {e}")
+            print(f"[twitter-fetcher] WARNING: Could not parse/write session data: {e}")
+    
     if os.path.exists("/tmp/x_session.json"):
         return "/tmp/x_session.json"
     local = str(_BACKEND_DIR / "x_session.json")
