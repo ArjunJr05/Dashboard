@@ -54,13 +54,35 @@ app = Flask(__name__, static_folder="public", static_url_path="")
 CORS(app)
 app.register_blueprint(analysis_bp)
 
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger(__name__)
-
 import json
 import base64
 
+# Configure logging to console AND file for the web viewer
+log_file = os.path.join(DATA_DIR, "app.log")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+log = logging.getLogger(__name__)
+
 # ── Routes ────────────────────────────────────────────────
+@app.route("/logs")
+@app.route("/api/logs")
+def view_logs():
+    """Endpoint to view the last 100 lines of logs in the browser."""
+    if not os.path.exists(log_file):
+        return "Log file not created yet. Please wait for the first fetch cycle.", 200
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            # Return last 100 lines
+            return Response("".join(lines[-100:]), mimetype="text/plain")
+    except Exception as e:
+        return f"Error reading logs: {e}", 500
 @app.route("/")
 def index():
     return send_from_directory(PUBLIC_DIR, "index.html")
