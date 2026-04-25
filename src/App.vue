@@ -489,9 +489,7 @@
                 <img v-if="(twitter.recent_posts||[])[twitterIdx]?.screenshot_url && !xImageFallback"
                   :src="apiUrl((twitter.recent_posts||[])[twitterIdx].screenshot_url)"
                   class="xf-left-img" @error="xImageFallback=true" alt="tweet"/>
-                <div v-else class="xf-left-text-block">
-                  <div class="xf-left-text">{{ (twitter.recent_posts||[])[twitterIdx]?.body || '' }}</div>
-                  
+                <div v-else>
                   <!-- Fallback Live Preview if no screenshots/images -->
                   <div class="xf-fallback-preview">
                     <img :src="'https://image.thum.io/get/width/1200/noanimate/' + (twitter.recent_posts||[])[twitterIdx]?.url" 

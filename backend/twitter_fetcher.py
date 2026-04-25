@@ -909,10 +909,10 @@ def fetch_twitter_data():
         originals = sorted(originals, key=lambda x: x.get("datetime", ""), reverse=True)
         reposts = sorted(reposts, key=lambda x: x.get("datetime", ""), reverse=True)
 
-        # Limit to 3 tweets to avoid OOM on 512MB RAM
-        selected = originals[:3]
-        if len(selected) < 3:
-            need = 3 - len(selected)
+        # Set limit back to 5 but we will capture them sequentially to save RAM
+        selected = originals[:5]
+        if len(selected) < 5:
+            need = 5 - len(selected)
             selected.extend(reposts[:need])
 
         # If account timeline appears stale, fill with recent live mentions.
@@ -950,24 +950,21 @@ def fetch_twitter_data():
                 if node:
                     try:
                         node.scroll_into_view_if_needed(timeout=5000)
-                    except Exception:
-                        pass
-                    time.sleep(0.8)
-                    try:
+                        time.sleep(1) # Extra wait for image loading
                         node.screenshot(path=shot_path)
                         captured = os.path.exists(shot_path)
                     except Exception as e:
                         log.warning(f"Timeline node screenshot failed for post {count}: {e}")
-
-                # Fallback strategy: open tweet detail and capture first tweet block.
+                
+                # If node capture failed, try detail page but keep it brief
                 if not captured:
-                    page.goto(cand["url"], wait_until="domcontentloaded", timeout=45000)
-                    page.wait_for_selector('[data-testid="tweet"]', timeout=15000)
-                    tweet_nodes = page.query_selector_all('[data-testid="tweet"]')
-                    if tweet_nodes:
-                        tweet_nodes[0].screenshot(path=shot_path)
-                    else:
+                    try:
+                        page.goto(cand["url"], wait_until="commit", timeout=30000)
+                        page.wait_for_selector('[data-testid="tweet"]', timeout=10000)
                         page.screenshot(path=shot_path, full_page=False)
+                        captured = os.path.exists(shot_path)
+                    except Exception:
+                        pass
 
                 screenshot_paths.append(shot_path if os.path.exists(shot_path) else "")
             except Exception as e:

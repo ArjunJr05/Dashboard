@@ -1,218 +1,218 @@
 {
-  "last_updated": "2026-04-06 10:33:47",
+  "last_updated": "2026-04-08 16:48:09",
   "appstore": {
     "rating": 4.7,
-    "rating_count": 19429,
+    "rating_count": 19436,
     "downloads": null,
     "downloads_note": "Apple App Store does not publish download count",
     "reviews": [
       {
-        "author": "Tumul Parashari",
-        "body": "A Promising Indian Alternative. Developed by Zoho, it focuses on privacy and data storage in India.",
+        "author": "Om Ghanchi",
+        "body": "So many updates but still waiting for calling from Oman not connected",
+        "rating": 5,
+        "date": "Recently",
+        "sentiment": "Frustrated",
+        "timing": 4
+      },
+      {
+        "author": "Dr.SDhananjay",
+        "body": "Homegrown tech",
         "rating": 5,
         "date": "Recently",
         "sentiment": "Ecstatic",
-        "timing": 5
+        "timing": 2
       },
       {
-        "author": "HinokamiKagura",
-        "body": "A Refreshing and Secure Messaging App from Zoho! Right from the clean and intuitive interface, everything feels thoughtful.",
+        "author": "IAjit85",
+        "body": "I gave this 3 stars because I haven’t tested other features yet, but it failed completely at my primary purpose: reliable audio and video calling at sea.\nDownloaded Arattai hoping for low-data calls to save bandwidth onboard ship, but WhatsApp audio is far clearer with no lag. Arattai voice calls stutter constantly and sound muffled—unusable for proper conversation. Even IMO offers better voice clarity.\nSwitched back to WhatsApp despite higher data use. Devs, please prioritize fixing audio/video quality!",
+        "rating": 3,
+        "date": "Recently",
+        "sentiment": "Frustrated",
+        "timing": 26
+      },
+      {
+        "author": "YAB MO stock",
+        "body": "I tried Arattai today, and it works 👏 I am very happy to shift to our own desi messenger",
         "rating": 5,
         "date": "Recently",
         "sentiment": "Ecstatic",
         "timing": 6
       },
       {
-        "author": "Suresh G",
-        "body": "Very proud to use an Indian app. The cross-platform syncing is seamless and fast.",
-        "rating": 5,
-        "date": "Recently",
-        "sentiment": "Ecstatic",
-        "timing": 5
-      },
-      {
-        "author": "Aditi R",
-        "body": "Clean UI, no ads, and very secure. Arattai is better than other global apps for privacy.",
-        "rating": 5,
-        "date": "Recently",
-        "sentiment": "Ecstatic",
-        "timing": 5
-      },
-      {
-        "author": "Vijay Kumar",
-        "body": "The app is very fast and easy to navigate. Love the stickers and local touch.",
-        "rating": 4,
-        "date": "Recently",
-        "sentiment": "Happy",
-        "timing": 5
-      },
-      {
-        "author": "Meera",
-        "body": "Swadeshi app at its best. No data sharing, exactly what I was looking for.",
-        "rating": 5,
-        "date": "Recently",
-        "sentiment": "Ecstatic",
-        "timing": 5
-      },
-      {
-        "author": "Rohan J",
-        "body": "Excellent UI and smooth messaging experience. Proudly Indian!",
+        "author": "Awesome myn",
+        "body": "Outstanding Performance \nIt has different from what’s up completely.",
         "rating": 5,
         "date": "Recently",
         "sentiment": "Ecstatic",
         "timing": 3
       },
       {
-        "author": "Priya",
-        "body": "Simple and clean. Focus on security is a big win for Arattai.",
-        "rating": 5,
+        "author": "vandy3631",
+        "body": "Hey voice message is not working properly please check and bring fix",
+        "rating": 2,
         "date": "Recently",
-        "sentiment": "Ecstatic",
+        "sentiment": "Angry",
         "timing": 4
       },
       {
-        "author": "Ankit",
-        "body": "Best feature is the Zoho integration. Makes it perfect for office use.",
+        "author": "dhujff",
+        "body": "This app is installing since last 8 hours, very disappointed.",
         "rating": 4,
         "date": "Recently",
-        "sentiment": "Happy",
-        "timing": 4
+        "sentiment": "Frustrated",
+        "timing": 3
       },
       {
-        "author": "Divya",
-        "body": "Good app, works fine. Looking forward to more features similar to WhatsApp.",
+        "author": "Santosh2021",
+        "body": "Overall application is best but i face some problem when i play video on this app i face problem video is pause but time line is running",
+        "rating": 3,
+        "date": "Recently",
+        "sentiment": "Neutral",
+        "timing": 9
+      },
+      {
+        "author": "copardeep",
+        "body": "I support indian app but app name is very stupid.",
+        "rating": 1,
+        "date": "Recently",
+        "sentiment": "Angry",
+        "timing": 3
+      },
+      {
+        "author": "Rajen.b",
+        "body": "Some issues when video call running \nLike automatic call disconnect",
         "rating": 5,
         "date": "Recently",
         "sentiment": "Ecstatic",
-        "timing": 4
+        "timing": 3
       }
     ]
   },
   "playstore": {
     "rating": 4.6,
-    "rating_count": 229543,
+    "rating_count": 229589,
     "downloads": "10,000,000+",
     "downloads_count": 10000000,
     "reviews": [
       {
-        "author": "Hema devi",
-        "body": "great app",
+        "author": "Radhe Shyam",
+        "body": "good",
         "rating": 5,
-        "date": "2026-04-05",
+        "date": "2026-04-07",
         "sentiment": "Ecstatic",
         "timing": 2
       },
       {
-        "author": "Arjun Kumar",
-        "body": "व्हाट्सएप से बहुत ज्यादा अच्छा है",
+        "author": "Debraj Das",
+        "body": "When thee app has finally lunched the end to end encryption, we need to use the app more and more",
         "rating": 5,
-        "date": "2026-04-05",
+        "date": "2026-04-07",
+        "sentiment": "Ecstatic",
+        "timing": 7
+      },
+      {
+        "author": "Babul Bharti",
+        "body": "excellent",
+        "rating": 5,
+        "date": "2026-04-07",
         "sentiment": "Ecstatic",
         "timing": 2
       },
       {
-        "author": "Karan Kalyan",
-        "body": "arratai It is a very good messaging social media platform.",
+        "author": "HESKA GAMING",
+        "body": "Please add Face Effects. Thank You",
         "rating": 5,
-        "date": "2026-04-05",
-        "sentiment": "Ecstatic",
-        "timing": 3
-      },
-      {
-        "author": "sindhuja nagalla",
-        "body": "Great app experience overall—really enjoying using it! However, there’s one important area that could be improved. Currently, it’s difficult to identify which of my phone contacts are already using the app unless I manually add them within the app. It would be much more convenient if, like WhatsApp, the app could automatically detect and display contacts who are already using the platform. This feature would make connecting with friends much faster and smoother.",
-        "rating": 4,
-        "date": "2026-04-05",
-        "sentiment": "Happy",
-        "timing": 24
-      },
-      {
-        "author": "Samaresh Naskar",
-        "body": "nice",
-        "rating": 5,
-        "date": "2026-04-04",
+        "date": "2026-04-07",
         "sentiment": "Ecstatic",
         "timing": 2
       },
       {
-        "author": "Vishnu Vaidya",
-        "body": "Suggestion : Add an option to mute an individual during a meeting for self. That would be of great help as there are individuals who doesn't turn off their mic & hope this will be noted else I will be forced to use telegram again",
-        "rating": 4,
-        "date": "2026-04-04",
-        "sentiment": "Happy",
-        "timing": 15
-      },
-      {
-        "author": "Sudhin Das",
-        "body": "as a new joiner guide needed.",
-        "rating": 4,
-        "date": "2026-04-04",
-        "sentiment": "Happy",
-        "timing": 2
-      },
-      {
-        "author": "Anis Kumar",
-        "body": "bleive it",
+        "author": "Light Yagami",
+        "body": "have some issue:- point no 1:-doesn't have QR scan contact add list",
         "rating": 5,
-        "date": "2026-04-04",
+        "date": "2026-04-07",
+        "sentiment": "Ecstatic",
+        "timing": 4
+      },
+      {
+        "author": "Anshul Sengar",
+        "body": "App ka design aur features dono top-notch hain. Sabse achhi baat ye hai ki isme koi faltu ke ads ya lags nahi hain. Developers ne kaafi achha kaam kiya hai. 5 stars!\" Agar aap ek aisi app dhund rahe hain jo aapki privacy ko private hi rakhe aur apna kaam perfect kare, toh ye wahi hai. Iske update bhi time par aate hain jo ise aur behtar banate hain. ese Zaroor try karein. ek baar. 🙏🙏",
+        "rating": 5,
+        "date": "2026-04-07",
+        "sentiment": "Ecstatic",
+        "timing": 25
+      },
+      {
+        "author": "Devansh Tiwari",
+        "body": "Great App. except no one in my friend circle uses it.",
+        "rating": 5,
+        "date": "2026-04-06",
+        "sentiment": "Ecstatic",
+        "timing": 4
+      },
+      {
+        "author": "Rekha Bugdi",
+        "body": "super",
+        "rating": 5,
+        "date": "2026-04-06",
         "sentiment": "Ecstatic",
         "timing": 2
       },
       {
-        "author": "Balaji Toys Supply office",
-        "body": "supar app",
-        "rating": 5,
-        "date": "2026-04-04",
-        "sentiment": "Ecstatic",
-        "timing": 2
-      },
-      {
-        "author": "rakesh dhiman",
-        "body": "pls change the Name",
-        "rating": 4,
-        "date": "2026-04-04",
-        "sentiment": "Happy",
-        "timing": 2
-      },
-      {
-        "author": "Sooraj Singh",
+        "author": "Patel Akhilesh",
         "body": "good experience",
         "rating": 5,
-        "date": "2026-04-04",
+        "date": "2026-04-06",
         "sentiment": "Ecstatic",
         "timing": 2
       },
       {
-        "author": "Akash Gupta",
-        "body": "support indian app",
+        "author": "Ashok Raj",
+        "body": "Good",
+        "rating": 4,
+        "date": "2026-04-06",
+        "sentiment": "Happy",
+        "timing": 2
+      },
+      {
+        "author": "Aditya Verma",
+        "body": "best chat Messenger ❣️❣️",
         "rating": 5,
-        "date": "2026-04-04",
+        "date": "2026-04-06",
         "sentiment": "Ecstatic",
         "timing": 2
       },
       {
-        "author": "PINKI SAHA",
-        "body": "Good 👍👍🏽👍🏽👍👍🏽👍🏽👍🏽👍🏽👍🏽👍",
+        "author": "Subhadip Naskar",
+        "body": "Arrattai is a greater application for chats, medea seyar.",
         "rating": 5,
-        "date": "2026-04-04",
-        "sentiment": "Ecstatic",
-        "timing": 2
-      },
-      {
-        "author": "Tapas Naskar",
-        "body": "nice app. interface very good.jay hind jai bharat.",
-        "rating": 5,
-        "date": "2026-04-04",
+        "date": "2026-04-06",
         "sentiment": "Ecstatic",
         "timing": 3
       },
       {
-        "author": "Ranganath Ranga",
-        "body": "atatmanirbhar bharatham is good achievement 👍 of india it is a example of this well done 👍 zoho 👍👍🫡🫡",
+        "author": "swapan kumar pathak",
+        "body": "Best",
         "rating": 5,
-        "date": "2026-04-04",
+        "date": "2026-04-06",
         "sentiment": "Ecstatic",
-        "timing": 6
+        "timing": 2
+      },
+      {
+        "author": "Ashish Nishad",
+        "body": "nice option but chat backup on google is not correct",
+        "rating": 5,
+        "date": "2026-04-06",
+        "sentiment": "Ecstatic",
+        "timing": 3
+      },
+      {
+        "author": "Bhagya",
+        "body": "Ek baar try karke dekho, bina chalaye mat bolna... Privacy solid, end‑to‑end encryption, jo baki apps ko 7-8 saal mein mila, yahan 4-5 salo mai aa gaya... 🚀 Apni cheez hai, apna style hai… simple, fast aur seedha kaam ka 🇮🇳 Aur haan — jo try karke bolte hain 'samajh nahi aaya'… unse bas itna ...jab cheez clean ho na, toh logon ko complex lagti hi lagti hai. Jo pasand kare, woh use kare; jo na kare… unke liye toh duniya bhar ke apps pade hi hain...",
+        "rating": 5,
+        "date": "2026-04-06",
+        "sentiment": "Ecstatic",
+        "timing": 29
       }
     ]
   },
@@ -270,27 +270,32 @@
           {
             "author": "Shani Yadav",
             "body": "Arattai aak best app hai smooth hai and india platform hai lekin yaha per user nahi hai jisase ham chat kar sake isliye aap whatsapp ka takkar nahi de pa rahe hai aisa feature daliye jisase ham whatsapp per bhi ham chat kar sake",
-            "timing": 15
+            "timing": 15,
+            "sentiment": "Neutral"
           },
           {
             "author": "Shani Yadav",
             "body": "@Arattai\n add new feature scam alert voice ka feature \nNotification issue internet slow rahata hai taab mass ka notification nahi aata hai",
-            "timing": 7
+            "timing": 7,
+            "sentiment": "Frustrated"
           },
           {
             "author": "Bhimam Kumar",
             "body": "Arattai के message फ्रेम डिज़ाइन को नया रूप दीजिये. ऑडियो message के frame इलेक्ट्रिक frame दीजिये.. ग्रुप photo fitures लाये, ग्रुप वीडियो कॉलिंग और ग्रुप ऑडियो कॉलिंग fitures लाये",
-            "timing": 10
+            "timing": 10,
+            "sentiment": "Neutral"
           },
           {
             "author": "खुरपेंची स्वास्थ्य",
             "body": "FSSAI 140 करोड़ लोगों की ज़िंदगी से खेल रहा है।\n\nदेश के सबसे निकम्मे और भ्रष्ट विभागों में से एक बन चुका है।\n\nन सही checks,\nन proper inspections,\nबस ऐसे certificates बंट रहे हैं जैसे किराने का सामान हो।\n\nदेश का खाना हर दिन और ज़हरीला होता जा रहा है।",
-            "timing": 17
+            "timing": 17,
+            "sentiment": "Neutral"
           },
           {
             "author": "Ankit Kumar Avasthi",
             "body": "ऑन सीरियस नोट,\n\nगैस सिलेंडर की कमी से परेशानी तो हो रही है, लेकिन सबसे ज्यादा असर प्रवासी श्रमिकों और घर से बाहर लॉज, पीजी या कमरा लेकर पढ़ाई कर रहे छात्रों पर हो रहा है। जिनका अपना कनेक्शन है, उनका तो काम चल रहा है। यहां तक कि जिनका जुगाड़ चल रहा है, वे एक-दो सिलेंडर ज्यादा ही",
-            "timing": 20
+            "timing": 20,
+            "sentiment": "Neutral"
           }
         ],
         "screenshot_url": "/api/data/tweet_0.png"
@@ -312,27 +317,32 @@
           {
             "author": "Secular guy",
             "body": "Why can't I back up messages on zohomail or zoho drive?",
-            "timing": 4
+            "timing": 4,
+            "sentiment": "Neutral"
           },
           {
             "author": "Amlendu Roy",
             "body": "Double tick and blue ticks?",
-            "timing": 2
+            "timing": 2,
+            "sentiment": "Neutral"
           },
           {
             "author": "Rajasekhar",
             "body": "Everything is there in Arattai  . Just Users are not there  . App promotions Never seen In Public",
-            "timing": 6
+            "timing": 6,
+            "sentiment": "Neutral"
           },
           {
             "author": "Secular guy",
             "body": "I don't get double tick on message delivery. It goes directly from single tick to double blue tick. I would like to know whether my message is delivered or not.",
-            "timing": 10
+            "timing": 10,
+            "sentiment": "Neutral"
           },
           {
             "author": "जन्मेंजय सिंह बैस",
             "body": "You missed broadcast reactivate with e2ee.",
-            "timing": 2
+            "timing": 2,
+            "sentiment": "Neutral"
           }
         ],
         "screenshot_url": "/api/data/tweet_1.png"
@@ -352,27 +362,32 @@
           {
             "author": "pankaj yadaw",
             "body": "Dear  Arattai \nKya ham logo ko massage delever ka duble tick \nAnd massage seen ka blue tick \nJise ham log samajh paye \nKi samne wala massage ignore kar rha \nYa uska net on nhi hai",
-            "timing": 12
+            "timing": 12,
+            "sentiment": "Neutral"
           },
           {
             "author": "Pradip Vasava",
             "body": "When we create custom stickers the quality of it is \" reduced \"..give more edit features in custom stickers.",
-            "timing": 6
+            "timing": 6,
+            "sentiment": "Neutral"
           },
           {
             "author": "Yashpal",
             "body": "@arattai\n i have DM you some problems can you please see and fix them",
-            "timing": 5
+            "timing": 5,
+            "sentiment": "Neutral"
           },
           {
             "author": "SridharSolaris",
             "body": "give the users the privilege to create their own custom sticker packs and upload it to arattai sticker store \n@Arattai\n \n@svembu",
-            "timing": 7
+            "timing": 7,
+            "sentiment": "Neutral"
           },
           {
             "author": "ASIF ANGLE",
             "body": "Dear Team Arattai \n\nCan You Change the Full UI/UX of Arattai messenger Because it looks so old type \nSuggestion \nMake like Telegram / WhatsApp \n\nAND please do fast \nTo complete with others \n\nDo this then I use the App",
-            "timing": 13
+            "timing": 13,
+            "sentiment": "Neutral"
           }
         ],
         "screenshot_url": "/api/data/tweet_2.png"
@@ -394,27 +409,32 @@
           {
             "author": "Shanmukh",
             "body": "Please improve the chat UI first. Also make one tick for sent message, two ticks for delivered message and 2 blue ticks for read message in read receipts.",
-            "timing": 9
+            "timing": 9,
+            "sentiment": "Neutral"
           },
           {
             "author": "Vedant",
             "body": "Zoho drive option  is not available?\nPls build this integration  as well.",
-            "timing": 4
+            "timing": 4,
+            "sentiment": "Neutral"
           },
           {
             "author": "RAKESH KUMAR",
             "body": "Feature Request: Add App Lock (Chat Lock) Feature on Arattai Web – Just Like WhatsApp",
-            "timing": 5
+            "timing": 5,
+            "sentiment": "Neutral"
           },
           {
             "author": "Bhavik Jain",
             "body": "And give zoho mail verification option in arattai app and please fixed channel bugs in arattai app I don’t understand PM MODI JI which channel is real and which channel is fake so please do work on this",
-            "timing": 13
+            "timing": 13,
+            "sentiment": "Neutral"
           },
           {
             "author": "Aniket Mazumder",
             "body": "Pls Add support zoho workdrive..\n\nBecause it makes us totally local.\nDependent other 3rd party companies",
-            "timing": 5
+            "timing": 5,
+            "sentiment": "Neutral"
           }
         ],
         "screenshot_url": "/api/data/tweet_3.png"
@@ -434,27 +454,32 @@
           {
             "author": "Vivek Rana",
             "body": "Thanks for the update. Appreciate the transparency. Hope the issue gets resolved soon and services are restored quickly. Looking forward to Arattai being back up and running smoothly.",
-            "timing": 9
+            "timing": 9,
+            "sentiment": "Neutral"
           },
           {
             "author": "Skilleater...!!!",
             "body": "@svembu\n Let Arattai help in delivering critical sms/ otp as secondary layer. Adoption via familiarity is key for success. Something which Windows did with it's relaxed stance on pirated versions in the 2000s.",
-            "timing": 11
+            "timing": 11,
+            "sentiment": "Neutral"
           },
           {
             "author": "Xythrox",
             "body": "Hey Arattai team, could you consider updating the app’s design and giving it a fresh, modern look that Gen-Z users would like? Many apps today are constantly improving their look and features, but Arattai still feels a bit outdated.",
-            "timing": 13
+            "timing": 13,
+            "sentiment": "Neutral"
           },
           {
             "author": "Tatvik",
             "body": "Get Well soon!",
-            "timing": 2
+            "timing": 2,
+            "sentiment": "Neutral"
           },
           {
             "author": "काल_एक_ब्रह्मास्त्र!",
             "body": "Dear Team,\n\nYour apps hangs a lot, still we give first priority to it while calling  or chatting, if it doesn't work then we move to whatsapp.\n\nHope you improve & we will keep supporting you.\n\n#MakeInIndia",
-            "timing": 12
+            "timing": 12,
+            "sentiment": "Neutral"
           }
         ],
         "screenshot_url": "/api/data/tweet_4.png"
@@ -468,5 +493,6 @@
       "tweet_4.png": "data:image/png;base64,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"
     }
   },
-  "last_enriched": "2026-04-06 10:33:47"
+  "last_enriched": "2026-04-08 16:54:09",
+  "last_twitter_enriched": "2026-04-08 16:54:09"
 }
