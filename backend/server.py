@@ -75,10 +75,12 @@ log = logging.getLogger(__name__)
 def view_logs():
     """Endpoint to view the last 100 lines of logs in the browser."""
     if not os.path.exists(log_file):
-        return "Log file not created yet. Please wait for the first fetch cycle.", 200
+        return "Log file not created yet. The system is still booting up... Please refresh in 30 seconds.", 200
     try:
         with open(log_file, "r", encoding="utf-8") as f:
             lines = f.readlines()
+            if not lines:
+                return "Log file exists but is currently empty. Waiting for the first background task to start...", 200
             # Return last 100 lines
             return Response("".join(lines[-100:]), mimetype="text/plain")
     except Exception as e:
