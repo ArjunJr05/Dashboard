@@ -40,7 +40,7 @@ WORKDIR /app/backend
 # ── Python dependencies (Split to identify failures) ──────────
 COPY backend/requirements.txt ./
 RUN pip install --upgrade pip
-RUN pip install flask flask-cors requests beautifulsoup4 schedule gunicorn
+RUN pip install flask flask-cors requests beautifulsoup4 schedule gunicorn Pillow
 RUN pip install google-play-scraper app_store_scraper
 RUN pip install playwright
 RUN pip install zcatalyst-sdk
