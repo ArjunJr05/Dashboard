@@ -853,12 +853,29 @@ def fetch_twitter_data():
             log.warning("Could not scrape follower count from profile header")
 
 
-        # Remove login walls / overlays
-        for sel in ['#layers', '[data-testid="BottomBar"]', '[data-testid="sheetDialog"]']:
+        # Remove login walls / overlays / banners that block tweets
+        overlay_selectors = [
+            '#layers', 
+            '[data-testid="BottomBar"]', 
+            '[data-testid="sheetDialog"]',
+            'div[role="group"] > div > div > div > div > [role="button"]', # "Not now" button
+            '.r-12vffkv', # General overlay class
+        ]
+        for sel in overlay_selectors:
             try:
-                page.evaluate(f"document.querySelector('{sel}')?.remove()")
+                page.evaluate(f"document.querySelectorAll('{sel}').forEach(el => el.remove())")
             except Exception:
                 pass
+        
+        # Click "Not now" or similar if a dialog is present
+        try:
+            for text in ["Not now", "Refuse optional cookies", "Close"]:
+                btn = page.get_by_role("button", name=text).first
+                if btn.is_visible():
+                    btn.click()
+                    log.info(f"Dismissed overlay button: {text}")
+        except Exception:
+            pass
 
         try:
             page.wait_for_selector('[data-testid="tweet"]', timeout=20000)
@@ -890,17 +907,29 @@ def fetch_twitter_data():
                     if "pinned" in social_text:
                         continue
 
-                    time_el = node.query_selector("time")
+                    # Try multiple ways to get the date if <time> is missing
                     date_str = ""
-                    tweet_url = ""
-
+                    datetime_val = ""
+                    time_el = node.query_selector("time")
                     if time_el:
-                        date_str = (time_el.get_attribute("datetime") or "")[:10]
-                        link_el = time_el.evaluate_handle("el => el.closest('a')")
-                        if link_el:
-                            href = link_el.get_attribute("href")
-                            if href:
-                                tweet_url = f"https://x.com{href}" if href.startswith("/") else href
+                        datetime_val = time_el.get_attribute("datetime") or ""
+                        date_str = datetime_val[:10]
+                    else:
+                        # Fallback: look for any text that looks like a date (e.g., "Apr 24")
+                        log.info("Time tag missing, checking sibling spans...")
+                        spans = node.query_selector_all("span")
+                        for s in spans:
+                            txt = s.inner_text().strip()
+                            if re.match(r'^[A-Z][a-z]{2}\s\d{1,2}$', txt): # e.g. "Apr 24"
+                                date_str = f"2026-{txt}" # Approximated for stale check
+                                break
+
+                    tweet_url = ""
+                    link_el = node.query_selector('a[href*="/status/"]')
+                    if link_el:
+                        href = link_el.get_attribute("href")
+                        if href:
+                            tweet_url = f"https://x.com{href}" if href.startswith("/") else href
 
                     if not tweet_url or tweet_url in seen_links:
                         continue
@@ -908,6 +937,13 @@ def fetch_twitter_data():
 
                     body_el = node.query_selector('[data-testid="tweetText"]')
                     body = body_el.inner_text().strip() if body_el else ""
+                    # If no text, might be an image-only post, allow it if it has an image
+                    if not body:
+                        img_check = node.query_selector('img[src*="pbs.twimg.com/media/"]')
+                        if not img_check:
+                            continue
+                        body = "[Image Post]"
+
                     stats = _parse_stats(node)
 
                     candidate = {
@@ -916,9 +952,9 @@ def fetch_twitter_data():
                         "date": date_str,
                         "body": body,
                         "stats": stats,
-                        "datetime": (time_el.get_attribute("datetime") or "") if time_el else "",
+                        "datetime": datetime_val,
                     }
-
+                    log.info(f"Found tweet: {tweet_url} | Date: {date_str}")
                     if is_repost:
                         reposts.append(candidate)
                     else:
