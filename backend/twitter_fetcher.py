@@ -18,6 +18,8 @@ import base64
 import urllib.request as _urlreq
 from datetime import datetime
 from pathlib import Path
+from PIL import Image
+import io
 
 # ── Force Playwright browser path — must be set before playwright imports ──
 # Docker: /app/pw-browsers (set in Dockerfile ENV), Catalyst: /tmp/pw-browsers
@@ -132,14 +134,31 @@ def _local_file_url(path):
 
 
 def _file_to_data_url(path):
-    """Inline image bytes as a data URL. Auto-detects mime type from extension."""
+    """Inline image bytes as a data URL. Automatically compresses to JPEG to save RAM."""
     try:
-        ext = os.path.splitext(path)[1].lower()
-        mime = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
-        with open(path, "rb") as fh:
-            b64 = base64.b64encode(fh.read()).decode("ascii")
-        return f"data:{mime};base64,{b64}"
-    except Exception:
+        if not os.path.exists(path):
+            return ""
+        
+        # Open image and compress
+        with Image.open(path) as img:
+            # Convert RGBA to RGB if necessary (JPEG doesn't support alpha)
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            
+            # Resize if too large (max 1280px width)
+            if img.width > 1280:
+                ratio = 1280 / float(img.width)
+                new_height = int(float(img.height) * ratio)
+                img = img.resize((1280, new_height), Image.Resampling.LANCZOS)
+            
+            # Save to buffer with compression
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=70, optimize=True)
+            b64 = base64.b64encode(buffer.getvalue()).decode("ascii")
+            
+        return f"data:image/jpeg;base64,{b64}"
+    except Exception as e:
+        log.warning(f"Data URL conversion/compression failed for {path}: {e}")
         return ""
 
 
@@ -443,9 +462,7 @@ def _extract_post_images(node):
 
 def _download_image(url, dest_path, cookies=None):
     """
-    Download a single image URL to dest_path.
-    Uses a browser-like User-Agent; passes optional cookie header.
-    Returns True on success.
+    Download a single image URL to dest_path and compress it immediately.
     """
     try:
         req = _urlreq.Request(
@@ -461,12 +478,19 @@ def _download_image(url, dest_path, cookies=None):
         )
         if cookies:
             req.add_header('Cookie', cookies)
+        
         with _urlreq.urlopen(req, timeout=20) as resp:
-            with open(dest_path, 'wb') as fh:
-                fh.write(resp.read())
+            raw_data = resp.read()
+            
+        # Compress immediately to save disk/RAM
+        with Image.open(io.BytesIO(raw_data)) as img:
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            img.save(dest_path, format="JPEG", quality=70, optimize=True)
+            
         return os.path.exists(dest_path) and os.path.getsize(dest_path) > 500
     except Exception as e:
-        log.warning(f'Image download failed {url}: {e}')
+        log.warning(f'Image download/compression failed {url}: {e}')
         return False
 
 
@@ -777,7 +801,13 @@ def fetch_twitter_data():
                 "--disable-blink-features=AutomationControlled",
                 "--memory-pressure-off",
                 "--js-flags=--max-old-space-size=256",
-                "--single-process", # Crucial for 512MB RAM
+                "--single-process",
+                "--disable-extensions",
+                "--disable-component-update",
+                "--no-first-run",
+                "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-sync",
             ],
         )
         # Use a smaller viewport to save RAM
@@ -951,7 +981,7 @@ def fetch_twitter_data():
                     try:
                         node.scroll_into_view_if_needed(timeout=5000)
                         time.sleep(1) # Extra wait for image loading
-                        node.screenshot(path=shot_path)
+                        node.screenshot(path=shot_path, type="jpeg", quality=70)
                         captured = os.path.exists(shot_path)
                     except Exception as e:
                         log.warning(f"Timeline node screenshot failed for post {count}: {e}")
@@ -961,7 +991,7 @@ def fetch_twitter_data():
                     try:
                         page.goto(cand["url"], wait_until="commit", timeout=30000)
                         page.wait_for_selector('[data-testid="tweet"]', timeout=10000)
-                        page.screenshot(path=shot_path, full_page=False)
+                        page.screenshot(path=shot_path, type="jpeg", quality=70, full_page=False)
                         captured = os.path.exists(shot_path)
                     except Exception:
                         pass
@@ -1016,20 +1046,16 @@ def fetch_twitter_data():
             log.info(f"Post {count}: {cand['url']} ({cand['date']})")
             count += 1
 
-        # Scrape comments — recreate page if it crashes mid-way
+        # Scrape comments — recreate page for each to clear memory
         for i, post in enumerate(raw_posts):
             log.info(f"Scraping comments for post {i} ...")
             try:
-                if page.is_closed():
-                    log.warning("Page was closed — reopening for comments")
-                    page = context.new_page()
-                post["comments"] = _scrape_comments(page, post["url"])
+                # Open a fresh page for each post to prevent memory leaks
+                temp_page = context.new_page()
+                post["comments"] = _scrape_comments(temp_page, post["url"])
+                temp_page.close()
             except Exception as ce:
                 log.warning(f"Comment scrape error post {i}: {ce}")
-                try:
-                    page = context.new_page()
-                except Exception:
-                    pass
                 post["comments"] = []
             time.sleep(1)
 

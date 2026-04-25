@@ -10,3 +10,4 @@ playwright
 zcatalyst-sdk
 greenlet
 pyee
+Pillow
