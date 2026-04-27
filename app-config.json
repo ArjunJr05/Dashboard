@@ -2,7 +2,6 @@
 	"name": "slide-web",
 	"command": "gunicorn --bind 0.0.0.0:$X_ZOHO_CATALYST_LISTEN_PORT --workers 1 --threads 4 --timeout 0 server:app",
 	"build_path": ".",
-	"stack": "custom_runtime",
 	"docker_file": "Dockerfile",
 	"env_variables": {
 		"ENABLE_CATALYST_UPLOAD": "1",
