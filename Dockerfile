@@ -62,12 +62,11 @@ COPY --from=frontend-builder /app/dist/ ./public/
 ENV PYTHONUNBUFFERED=1 \
     PLAYWRIGHT_BROWSERS_PATH=/app/pw-browsers \
     HOME=/root \
-    PORT=8080 \
-    ENABLE_CATALYST_UPLOAD=0
+    ENABLE_CATALYST_UPLOAD=1
 
 # ── Port ────────────────────────────────────────────────────────
 EXPOSE 8080
 
 # ── Start ───────────────────────────────────────────────────────
-# Bypass run.sh (no pip install needed — everything is pre-baked)
-CMD ["python", "main.py"]
+# Use shell form to allow environment variable expansion ($X_ZOHO_CATALYST_LISTEN_PORT)
+CMD gunicorn --bind 0.0.0.0:$X_ZOHO_CATALYST_LISTEN_PORT --workers 1 --threads 4 --timeout 0 server:app
