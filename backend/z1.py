@@ -340,10 +340,13 @@ def fetch_google_news():
     
     # Try multiple queries to ensure we get results
     queries = [
-        "Arattai OR \"Arattai App\" OR \"Zoho Arattai\"",
-        "Zoho Corporation news",
-        "Messaging app India Arattai"
+        "Arattai messenger",
+        "Zoho Arattai app news",
+        "Arattai India messaging",
+        "Arattai Sridhar Vembu"
     ]
+    
+    print(f"[{now()}] INFO: Starting news fetch with {len(queries)} queries...")
     
     try:
         for q in queries:
@@ -392,12 +395,29 @@ def fetch_google_news():
     
     except Exception as e:
         print(f"Error news: {e}")
-        if not posts: posts = CURATED_FALLBACK
 
-        # 🔥 SAFETY FALLBACK: If fresh search is empty, inject curated classics 🔥
-        if not posts:
-            print(f"[{now()}] INFO: Fresh search empty. Injecting curated fallback.")
-            posts = CURATED_FALLBACK
+    # --- NEW: FINAL ATTEMPT - BROAD SEARCH ---
+    if len(posts) < 2:
+        print(f"[{now()}] INFO: Still low on news. Trying broad search fallback...")
+        try:
+            # Fallback to a very broad search if specific ones failed
+            broad_url = "https://news.google.com/rss/search?q=Arattai+app+India&hl=en-IN&gl=IN&ceid=IN:en"
+            r = requests.get(broad_url, headers=HEADERS, timeout=10)
+            root = ET.fromstring(r.text)
+            for item in root.findall('./channel/item')[:5]:
+                t = item.find('title').text; link = item.find('link').text
+                if not any(p['title'] == t for p in posts):
+                    summary, actual_url, image = get_summary(link, t, "Latest news about Arattai.")
+                    posts.append({
+                        "title": t, "url": link, "resolved_url": actual_url, 
+                        "date": now().split(' ')[0], "source": "Web Search", 
+                        "body": summary, "image": image if image else PLACEHOLDER
+                    })
+        except: pass
+
+    if not posts:
+        print(f"[{now()}] WARNING: All searches failed. Using curated fallback.")
+        posts = CURATED_FALLBACK
             
     except Exception as e:
         print(f"Error news: {e}")
