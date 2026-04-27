@@ -221,42 +221,29 @@ def fetch_appstore():
                     
                     if not isinstance(entries, list): entries = [entries]
                     
-                    # Collect up to 10 most recent reviews
-                    # Filter out metadata entry if it's the first one
+                    # Collect up to 20 most recent reviews
                     for ent in entries:
-                        if len(res_data["reviews"]) >= 10:
+                        if len(res_data["reviews"]) >= 20:
                             break
-                        # Skip if it's the 'id' field (metadata) instead of a review entry
                         if "im:rating" not in ent: continue
+                        
+                        # Extract real date if available
+                        raw_date = ent.get("updated", {}).get("label", "Recently")
+                        display_date = raw_date.split('T')[0] if 'T' in raw_date else "Recently"
                         
                         res_data["reviews"].append({
                             "author": ent.get("author", {}).get("name", {}).get("label", "User"),
                             "body": ent.get("content", {}).get("label", ""),
                             "rating": int(ent.get("im:rating", {}).get("label", 5)),
-                            "date": "Recently"
+                            "date": display_date
                         })
                     
                     if res_data["reviews"]:
                         rss_success = True
             except: continue
 
-        # 3. IF STILL EMPTY (Synthetic fallback with 10 reviews)
-        if len(res_data["reviews"]) < 10:
-             fallback_revs = [
-                {"author": "Tumul Parashari", "body": "A Promising Indian Alternative. Developed by Zoho, it focuses on privacy and data storage in India.", "rating": 5, "date": "Recently"},
-                {"author": "HinokamiKagura", "body": "A Refreshing and Secure Messaging App from Zoho! Right from the clean and intuitive interface, everything feels thoughtful.", "rating": 5, "date": "Recently"},
-                {"author": "Suresh G", "body": "Very proud to use an Indian app. The cross-platform syncing is seamless and fast.", "rating": 5, "date": "Recently"},
-                {"author": "Aditi R", "body": "Clean UI, no ads, and very secure. Arattai is better than other global apps for privacy.", "rating": 5, "date": "Recently"},
-                {"author": "Vijay Kumar", "body": "The app is very fast and easy to navigate. Love the stickers and local touch.", "rating": 4, "date": "Recently"},
-                {"author": "Meera", "body": "Swadeshi app at its best. No data sharing, exactly what I was looking for.", "rating": 5, "date": "Recently"},
-                {"author": "Rohan J", "body": "Excellent UI and smooth messaging experience. Proudly Indian!", "rating": 5, "date": "Recently"},
-                {"author": "Priya", "body": "Simple and clean. Focus on security is a big win for Arattai.", "rating": 5, "date": "Recently"},
-                {"author": "Ankit", "body": "Best feature is the Zoho integration. Makes it perfect for office use.", "rating": 4, "date": "Recently"},
-                {"author": "Divya", "body": "Good app, works fine. Looking forward to more features similar to WhatsApp.", "rating": 5, "date": "Recently"}
-             ]
-             # Fill up to 10
-             needed = 10 - len(res_data["reviews"])
-             res_data["reviews"].extend(fallback_revs[:needed])
+        # No longer using synthetic fallbacks to ensure only live data is shown
+        pass
 
     except Exception as e:
         print(f"Error AppStore Dynamic: {e}")
@@ -285,8 +272,8 @@ def fetch_playstore():
             except:
                 res_data["downloads_count"] = 0
 
-        # 2. RECENT REVIEWS (Pulling 15 to ensure we have at least 10)
-        rvs, _ = reviews(PLAY_PACKAGE, lang='en', country='in', sort=Sort.NEWEST, count=15)
+        # 2. RECENT REVIEWS (Pulling 30 to ensure freshness)
+        rvs, _ = reviews(PLAY_PACKAGE, lang='en', country='in', sort=Sort.NEWEST, count=30)
         for r in rvs:
             res_data["reviews"].append({
                 "author": r['userName'],
