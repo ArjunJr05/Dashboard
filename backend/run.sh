@@ -11,6 +11,7 @@ echo "[run.sh] Port: $PORT"
 # Install Python dependencies (fast, must finish before server starts)
 echo "[run.sh] Installing Python dependencies..."
 python3 -m pip install -r requirements.txt --user --quiet 2>&1 | tail -5
+python3 -m pip install app-store-scraper --no-deps --user --quiet
 echo "[run.sh] Python deps done."
 
 # Install Playwright Chromium IN THE BACKGROUND so server can start immediately.
