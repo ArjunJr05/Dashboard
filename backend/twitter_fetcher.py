@@ -904,8 +904,9 @@ def fetch_twitter_data():
                     social_ctx = node.query_selector('[data-testid="socialContext"]')
                     social_text = social_ctx.inner_text().lower() if social_ctx else ""
                     is_repost = "repost" in social_text
-                    if "pinned" in social_text:
-                        continue
+                    is_pinned = "pinned" in social_text
+                    
+                    # We now ALLOW pinned tweets because they are often the most important/recent news!
 
                     # Try multiple ways to get the date if <time> is missing
                     date_str = ""
@@ -915,13 +916,19 @@ def fetch_twitter_data():
                         datetime_val = time_el.get_attribute("datetime") or ""
                         date_str = datetime_val[:10]
                     else:
-                        # Fallback: look for any text that looks like a date (e.g., "Apr 24")
-                        log.info("Time tag missing, checking sibling spans...")
+                        # Fallback: check for relative time strings (e.g., "2h", "10m", "Now")
+                        log.info("Time tag missing or unusual, checking span texts...")
                         spans = node.query_selector_all("span")
                         for s in spans:
-                            txt = s.inner_text().strip()
-                            if re.match(r'^[A-Z][a-z]{2}\s\d{1,2}$', txt): # e.g. "Apr 24"
-                                date_str = f"2026-{txt}" # Approximated for stale check
+                            txt = s.inner_text().strip().lower()
+                            # Match "2h", "10m", "Now", "Just now"
+                            if re.match(r'^(\d+[smh]|now|just now)$', txt):
+                                date_str = datetime.now().strftime("%Y-%m-%d")
+                                datetime_val = datetime.now().isoformat()
+                                break
+                            # Match "Apr 24"
+                            if re.match(r'^[a-z]{3}\s\d{1,2}$', txt):
+                                date_str = f"2026-{txt}" # Approximated
                                 break
 
                     tweet_url = ""
@@ -953,6 +960,7 @@ def fetch_twitter_data():
                         "body": body,
                         "stats": stats,
                         "datetime": datetime_val,
+                        "is_pinned": is_pinned
                     }
                     log.info(f"Found tweet: {tweet_url} | Date: {date_str}")
                     if is_repost:
@@ -972,8 +980,9 @@ def fetch_twitter_data():
             page.mouse.wheel(0, 1600)
             time.sleep(2)
 
-        originals = sorted(originals, key=lambda x: x.get("datetime", ""), reverse=True)
-        reposts = sorted(reposts, key=lambda x: x.get("datetime", ""), reverse=True)
+        # Sort: Pinned first, then by datetime (newest first)
+        originals = sorted(originals, key=lambda x: (x.get("is_pinned", False), x.get("datetime", "")), reverse=True)
+        reposts = sorted(reposts, key=lambda x: (x.get("is_pinned", False), x.get("datetime", "")), reverse=True)
 
         # Set limit back to 5 but we will capture them sequentially to save RAM
         selected = originals[:5]
