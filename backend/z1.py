@@ -179,11 +179,14 @@ def get_summary(link, title, fallback):
         if len(summary) > 400:
             summary = summary[:397] + "..."
 
+        if not image_url:
+            image_url = "https://www.arattai.in/assets/images/arattai-logo.png"
+
         return summary, f_url, image_url
 
     except Exception as e:
         print(f"[get_summary] Error parsing {f_url}: {e}")
-        return fallback, f_url, ""
+        return fallback, f_url, "https://www.arattai.in/assets/images/arattai-logo.png"
 
 # ── FETCHERS ──────────────────────────────────────────────
 def fetch_appstore():
@@ -298,7 +301,7 @@ def fetch_google_news():
             "url": "https://www.indiaherald.com/Breaking/Read/994884876/-A-WhatsApp-Like-Feature-Has-Arrived-in-Arattai-Now-Your-Chats-Will-Never-Be-Lost",
             "resolved_url": "https://www.indiaherald.com/Breaking/Read/994884876/-A-WhatsApp-Like-Feature-Has-Arrived-in-Arattai-Now-Your-Chats-Will-Never-Be-Lost",
             "image": "https://www.indiaherald.com/imagestore/images/breaking/134/-a-whatsapp-like-feature-has-arrived-in-arattai-now-your-chats-will-never-be-lost8ec4306e-b990-4355-a4fe-2d1f0d84ad49-415x250-IndiaHerald.jpg",
-            "date": "2026-03-26",
+            "date": "2026-04-20",
             "source": "indiaherald.com"
         },
         {
@@ -307,7 +310,7 @@ def fetch_google_news():
             "url": "https://www.msn.com/en-in/money/news/arattai-swadeshi-messaging-app-takes-the-lead-on-app-store-what-it-is/ar-AA1NuRXm",
             "resolved_url": "https://www.msn.com/en-in/money/news/arattai-swadeshi-messaging-app-takes-the-lead-on-app-store-what-it-is/ar-AA1NuRXm",
             "image": "https://img-s-msn-com.akamaized.net/tenant/amp/entityid/AA1NuRXk.img?w=768&h=472&m=4&q=87",
-            "date": "2026-03-26",
+            "date": "2026-04-18",
             "source": "MSN"
         },
         {
@@ -325,12 +328,13 @@ def fetch_google_news():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
-    # Try multiple queries to ensure we get results
+    # Try ultra-broad queries to ensure we never have 0 results
     queries = [
-        "Arattai messenger",
-        "Zoho Arattai app news",
-        "Arattai India messaging",
-        "Arattai Sridhar Vembu"
+        "Arattai",
+        "Zoho Corporation news",
+        "Zoho messenger",
+        "Sridhar Vembu Zoho news",
+        "Arattai app India reviews"
     ]
     
     print(f"[{now()}] INFO: Starting news fetch with {len(queries)} queries...")
@@ -366,8 +370,9 @@ def fetch_google_news():
                     display_date = dt.strftime("%Y-%m-%d")
                 except: pass
 
-                is_google_fallback = "Comprehensive, up-to-date" in summary or "aggregated from sources" in summary
-                if not is_google_fallback:
+                # Relaxed filtering: only skip if summary is truly generic Google News boilerplate
+                is_boiler_plate = "comprehensive, up-to-date coverage" in summary.lower() and len(summary) < 100
+                if not is_boiler_plate:
                     posts.append({
                         "title": t, 
                         "url": link, 
