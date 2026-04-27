@@ -10,7 +10,7 @@ echo "[run.sh] Port: $PORT"
 
 # Install ESSENTIAL dependencies only (fast)
 echo "[run.sh] Installing core dependencies..."
-python3 -m pip install flask flask-cors --user --quiet
+python3 -m pip install flask flask-cors beautifulsoup4 requests --user --quiet
 
 # Start the server IMMEDIATELY in the foreground
 # The Twitter and News schedulers already have built-in delays (30s)
