@@ -23,6 +23,53 @@ import requests as req_lib
 from bs4 import BeautifulSoup
 import json
 import base64
+import shutil
+import threading
+
+_backend_dir = Path(__file__).resolve().parent
+
+def _seed_tmp_data():
+    """Ensure data.json and x_session.json are in /tmp for Catalyst/Linux."""
+    if os.name == 'nt': return
+    try:
+        src_data = _backend_dir / "data.json"
+        if src_data.exists() and not Path("/tmp/data.json").exists():
+            shutil.copy2(str(src_data), "/tmp/data.json")
+            print("[server] ✓ Seeded /tmp/data.json", flush=True)
+        src_session = _backend_dir / "x_session.json"
+        if src_session.exists() and not Path("/tmp/x_session.json").exists():
+            shutil.copy2(str(src_session), "/tmp/x_session.json")
+            print("[server] ✓ Seeded /tmp/x_session.json", flush=True)
+    except: pass
+
+def _background_setup_wrapper():
+    """Wrapper to delay the background setup until server is ready."""
+    time.sleep(30)
+    try:
+        # We'll import and run the setup logic here
+        from twitter_fetcher import run_twitter_cycle
+        from z1 import run_fetch_cycle
+        # Start the loops
+        def scheduler_loop():
+            while True:
+                try: run_fetch_cycle()
+                except: pass
+                time.sleep(300)
+        def twitter_loop():
+            while True:
+                try: run_twitter_cycle()
+                except: pass
+                time.sleep(900)
+        threading.Thread(target=scheduler_loop, daemon=True).start()
+        threading.Thread(target=twitter_loop, daemon=True).start()
+    except Exception as e:
+        print(f"[server] Background setup failed: {e}", flush=True)
+
+# Run seeding immediately
+_seed_tmp_data()
+
+# Start background thread immediately
+threading.Thread(target=_background_setup_wrapper, daemon=True).start()
 
 # ── Import data fetcher ───────────────────────────────────
 from z1 import run_fetch_cycle, now

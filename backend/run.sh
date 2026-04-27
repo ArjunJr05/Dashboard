@@ -29,5 +29,7 @@ echo "[run.sh] Starting server to bind port..."
   touch /tmp/pw-ready
 ) &
 
-exec python3 main.py
+# Start the server IMMEDIATELY using Gunicorn (production grade)
+echo "[run.sh] Starting server with Gunicorn on port $PORT..."
+exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 0 server:app
 
