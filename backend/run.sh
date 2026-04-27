@@ -8,28 +8,26 @@ export HOME="/tmp"
 echo "[run.sh] Python: $(python3 --version 2>&1)"
 echo "[run.sh] Port: $PORT"
 
-# Install Python dependencies (fast, must finish before server starts)
-echo "[run.sh] Installing Python dependencies..."
-python3 -m pip install -r requirements.txt --user --quiet 2>&1 | tail -5
-python3 -m pip install app-store-scraper --no-deps --user --quiet
-echo "[run.sh] Python deps done."
+# Install ESSENTIAL dependencies only (fast)
+echo "[run.sh] Installing core dependencies..."
+python3 -m pip install flask flask-cors --user --quiet
 
-# Install Playwright Chromium IN THE BACKGROUND so server can start immediately.
-# Catalyst kills the process if it doesn't bind to the port within ~30 seconds.
-# The Twitter scheduler will wait until Chromium is ready before running.
-if [ ! -d "/tmp/pw-browsers" ]; then
-  echo "[run.sh] Playwright not found — installing in background..."
-  (
-    python3 -m playwright install chromium >> /tmp/pw-install.log 2>&1
-    python3 -m playwright install-deps chromium >> /tmp/pw-install.log 2>&1 || true
-    echo "[run.sh] Playwright background install complete." >> /tmp/pw-install.log
-    touch /tmp/pw-ready
-  ) &
-else
-  echo "[run.sh] Playwright already installed."
+# Start the server IMMEDIATELY in the foreground
+# The Twitter and News schedulers already have built-in delays (30s)
+# to wait for background tasks like playwright and remaining pip installs.
+echo "[run.sh] Starting server to bind port..."
+(
+  # Install the rest in the background
+  python3 -m pip install -r requirements.txt --user --quiet
+  python3 -m pip install app-store-scraper --no-deps --user --quiet
+  
+  # Install Playwright
+  python3 -m playwright install chromium
+  python3 -m playwright install-deps chromium || true
+  
+  echo "[run.sh] Background deps and Playwright complete."
   touch /tmp/pw-ready
-fi
+) &
 
-echo "[run.sh] Starting server..."
 exec python3 main.py
 
