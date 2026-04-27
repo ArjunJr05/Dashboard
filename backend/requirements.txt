@@ -1,16 +1,12 @@
-# Force modern versions to prevent downgrade crashes on Python 3.13
 requests>=2.31.0
 urllib3>=2.0.0
 idna>=3.4
 legacy-cgi
-
-# Core Dependencies
 flask
 flask-cors
 beautifulsoup4
 schedule
 google-play-scraper
-# app_store_scraper is installed manually with --no-deps to avoid conflicts
 gunicorn
 playwright
 zcatalyst-sdk
