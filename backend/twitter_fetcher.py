@@ -7,6 +7,14 @@ per post, uploads everything to Zoho Catalyst File Store (deleting stale
 files first), then writes the result into data.json.
 
 Schedule: called every 15 minutes from server.py
+
+POST MERGE LOGIC (v2):
+  - New posts fetched from X are merged with previously saved posts by URL.
+  - Dedup by URL → sort newest-first by datetime → keep top 5.
+  - If post 0 becomes post 2 (because 2 new posts arrived), its screenshot
+    + inline image data is carried over from prev_twitter, NOT discarded.
+  - inline_screenshots map is accumulated: old entries survive unless the
+    post that owns them is evicted from the top-5.
 """
 
 import os
@@ -32,7 +40,6 @@ try:
     _PW_AVAIL = True
 except ImportError:
     _PW_AVAIL = False
-    # Try to install playwright if it's missing
     import subprocess as _sp_mod, sys as _sys_mod
     try:
         print("[twitter-fetcher] playwright not found — attempting pip install...")
@@ -88,31 +95,22 @@ def _get_session_path():
         dest = "/tmp/x_session.json"
         try:
             data = json.loads(env_json)
-            
-            # --- Auto-cleaning for Chrome Extension exports ---
             if isinstance(data, dict) and "cookies" in data:
                 cookies = data["cookies"]
                 for c in cookies:
-                    # 1. Fix expiration key
                     if "expirationDate" in c:
                         c["expires"] = c.pop("expirationDate")
-                    
-                    # 2. Fix sameSite values (Playwright only allows Strict, Lax, or None)
                     ss = str(c.get("sameSite", "")).lower()
                     if ss in ["lax", "strict", "none"]:
                         c["sameSite"] = ss.capitalize()
                     else:
-                        c["sameSite"] = "None" # Default fallback
-                
-                # Wrap it back in the format Playwright expects
+                        c["sameSite"] = "None"
                 data = {"cookies": cookies, "origins": []}
-            
             with open(dest, "w") as f:
                 json.dump(data, f)
             return dest
         except Exception as e:
             print(f"[twitter-fetcher] WARNING: Could not parse/write session data: {e}")
-    
     if os.path.exists("/tmp/x_session.json"):
         return "/tmp/x_session.json"
     local = str(_BACKEND_DIR / "x_session.json")
@@ -138,24 +136,16 @@ def _file_to_data_url(path):
     try:
         if not os.path.exists(path):
             return ""
-        
-        # Open image and compress
         with Image.open(path) as img:
-            # Convert RGBA to RGB if necessary (JPEG doesn't support alpha)
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
-            
-            # Resize if too large (max 1280px width)
             if img.width > 1280:
                 ratio = 1280 / float(img.width)
                 new_height = int(float(img.height) * ratio)
                 img = img.resize((1280, new_height), Image.Resampling.LANCZOS)
-            
-            # Save to buffer with compression
             buffer = io.BytesIO()
             img.save(buffer, format="JPEG", quality=70, optimize=True)
             b64 = base64.b64encode(buffer.getvalue()).decode("ascii")
-            
         return f"data:image/jpeg;base64,{b64}"
     except Exception as e:
         log.warning(f"Data URL conversion/compression failed for {path}: {e}")
@@ -175,7 +165,6 @@ def _remote_tweet_screenshot(tweet_url):
 # ──────────────────────────────────────────────────────────
 
 def _catalyst_upload(file_paths):
-    # Always keep a local URL fallback so frontend can render screenshots in dev.
     local_urls = [_local_file_url(p) for p in file_paths]
     prod_fallback_urls = ["" for _ in file_paths]
 
@@ -186,7 +175,6 @@ def _catalyst_upload(file_paths):
         log.warning("zcatalyst-sdk not available in production – using inline screenshot fallback.")
         return prod_fallback_urls
 
-    # Enable upload by default in production (Linux/AppSail), keep it opt-in for local dev.
     default_upload = "1" if os.name != "nt" else "0"
     if os.environ.get("ENABLE_CATALYST_UPLOAD", default_upload) != "1":
         if os.name == "nt":
@@ -196,14 +184,10 @@ def _catalyst_upload(file_paths):
         return prod_fallback_urls
 
     urls = []
-
     try:
-        # Check if environment is initialized
         sdk_app = zcatalyst_sdk.initialize()
         fs      = sdk_app.filestore()
         folder  = fs.folder(CATALYST_FOLDER_ID)
-
-        # 1. Delete old screenshots
         try:
             old_files = folder.get_files()
             for f in old_files:
@@ -214,8 +198,6 @@ def _catalyst_upload(file_paths):
                     log.warning(f"Delete failed {f.get_file_id()}: {e}")
         except Exception as e:
             log.warning(f"Could not list folder files: {e}")
-
-        # 2. Upload new screenshots
         for path in file_paths:
             if not os.path.exists(path):
                 urls.append("")
@@ -233,7 +215,6 @@ def _catalyst_upload(file_paths):
             except Exception as e:
                 log.error(f"Upload failed {path}: {e}")
                 urls.append("" if os.name != "nt" else _local_file_url(path))
-
     except Exception as e:
         err = str(e)
         if "Catalyst headers are empty" in err:
@@ -241,12 +222,11 @@ def _catalyst_upload(file_paths):
         else:
             log.error(f"Catalyst SDK initialization error: {e}")
         urls = local_urls if os.name == "nt" else prod_fallback_urls
-
     return urls
 
 
 # ──────────────────────────────────────────────────────────
-#  X LOGIN  (domcontentloaded — avoids networkidle timeout)
+#  X LOGIN
 # ──────────────────────────────────────────────────────────
 
 def _login(page):
@@ -257,8 +237,6 @@ def _login(page):
         time.sleep(6)
 
         log.info("Attempting standard email/password login ...")
-        
-        # Try multiple selectors for email input field
         email_field = None
         for selector in [
             'input[autocomplete="username"]',
@@ -275,16 +253,15 @@ def _login(page):
                     break
             except:
                 pass
-        
+
         if not email_field:
             log.warning("Email field not found - trying any visible text input")
             email_field = page.wait_for_selector('input[type="text"]', timeout=10000)
-        
+
         if not email_field:
             log.error("Could not find email input field")
             return False
-        
-        # Type email slowly to avoid bot detection
+
         log.info(f"Filling email: {X_EMAIL}")
         for char in X_EMAIL:
             email_field.type(char, delay=50)
@@ -292,7 +269,6 @@ def _login(page):
         page.keyboard.press("Enter")
         time.sleep(5)
 
-        # Handle username challenge (if needed)
         log.info("Checking for username challenge ...")
         try:
             challenge = page.wait_for_selector('input[name="username"]', timeout=8000)
@@ -305,7 +281,6 @@ def _login(page):
         except:
             log.info("No username challenge detected, proceeding ...")
 
-        # Look for password field
         log.info("Waiting for password field ...")
         try:
             pw_field = page.wait_for_selector('input[name="password"]', timeout=10000)
@@ -319,14 +294,13 @@ def _login(page):
             log.error("Password field not found - login failed")
             return False
 
-        # Verify login success
         time.sleep(5)
         if _is_logged_in(page) or "/home" in page.url.lower():
             log.info("✓ Login successful")
             return True
         else:
             log.warning(f"Login verification inconclusive. URL: {page.url}")
-            return True  # Proceed anyway - session might work
+            return True
 
     except Exception as e:
         log.error(f"Login error: {e}")
@@ -342,17 +316,12 @@ def _scrape_comments(page, tweet_url):
     comments = []
     try:
         log.info(f"Opening tweet detail: {tweet_url}")
-        # Navigate with shorter timeout and no waiting for images to save memory
         page.goto(tweet_url, wait_until="domcontentloaded", timeout=30000)
         time.sleep(4)
-
-        # Scroll slightly to trigger reply loading
         page.mouse.wheel(0, 600)
         time.sleep(2)
         page.mouse.wheel(0, 800)
         time.sleep(2)
-
-        # Wait for reply nodes
         try:
             page.wait_for_selector('[data-testid="tweet"]', timeout=15000)
         except:
@@ -362,7 +331,6 @@ def _scrape_comments(page, tweet_url):
         nodes = page.query_selector_all('[data-testid="tweet"]')
         log.info(f"Detail page: detected {len(nodes)} tweet nodes.")
 
-        # Skip index 0 (main post). Start from 1 for replies.
         for node in nodes[1:]:
             if len(comments) >= 5:
                 break
@@ -374,7 +342,6 @@ def _scrape_comments(page, tweet_url):
                 if not body:
                     continue
 
-                # Extract author display name AND @handle
                 author_display = "User"
                 author_handle = ""
                 name_el = node.query_selector('[data-testid="User-Name"]')
@@ -399,7 +366,6 @@ def _scrape_comments(page, tweet_url):
             except Exception:
                 continue
 
-        # Free memory: navigate away before returning
         try:
             page.evaluate("window.stop()")
         except Exception:
@@ -436,22 +402,14 @@ def _parse_stats(node):
 # ──────────────────────────────────────────────────────────
 
 def _extract_post_images(node):
-    """
-    Extract media image URLs from a tweet DOM node.
-    Returns a list of high-resolution pbs.twimg.com image URLs found
-    in <img> elements inside the tweet card (excludes avatars/icons).
-    """
+    """Extract media image URLs from a tweet DOM node."""
     images = []
     try:
-        # All img tags inside the tweet node
         img_els = node.query_selector_all('img[src]')
         for img in img_els:
             src = img.get_attribute('src') or ''
-            # Only keep tweet media images (pbs.twimg.com), skip avatars/emoji
             if 'pbs.twimg.com/media/' not in src:
                 continue
-            # Upgrade to highest quality: replace format param and request 'large'
-            # e.g. https://pbs.twimg.com/media/XYZ?format=jpg&name=small  →  name=large
             src = re.sub(r'name=[a-z0-9]+', 'name=large', src)
             if src not in images:
                 images.append(src)
@@ -461,9 +419,7 @@ def _extract_post_images(node):
 
 
 def _download_image(url, dest_path, cookies=None):
-    """
-    Download a single image URL to dest_path and compress it immediately.
-    """
+    """Download a single image URL to dest_path and compress it immediately."""
     try:
         req = _urlreq.Request(
             url,
@@ -478,16 +434,12 @@ def _download_image(url, dest_path, cookies=None):
         )
         if cookies:
             req.add_header('Cookie', cookies)
-        
         with _urlreq.urlopen(req, timeout=20) as resp:
             raw_data = resp.read()
-            
-        # Compress immediately to save disk/RAM
         with Image.open(io.BytesIO(raw_data)) as img:
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
             img.save(dest_path, format="JPEG", quality=70, optimize=True)
-            
         return os.path.exists(dest_path) and os.path.getsize(dest_path) > 500
     except Exception as e:
         log.warning(f'Image download/compression failed {url}: {e}')
@@ -535,15 +487,11 @@ def _extract_followers(page):
                 raw_text = (link.inner_text() or "").strip()
                 if not raw_text:
                     continue
-
-                # Try full link text first (e.g. "43.2K Followers")
                 m = in_text_pat.search(raw_text.replace(" ", ""))
                 if m:
                     t = m.group(1).upper()
                     if pat.match(t):
                         return t, _count_text_to_int(t)
-
-                # Fallback: inspect nested spans
                 spans = link.query_selector_all("span")
                 for sp in spans:
                     t = (sp.inner_text() or "").strip().replace(" ", "").upper()
@@ -552,33 +500,32 @@ def _extract_followers(page):
         except Exception:
             continue
 
-        # Deep fallback: collect visible candidate texts from DOM and parse count-like token.
         try:
-                candidates = page.evaluate(
-                        """() => {
-                                const out = [];
-                                const push = (v) => {
-                                    const t = String(v || '').replace(/\s+/g, ' ').trim();
-                                    if (t) out.push(t);
-                                };
-                                document.querySelectorAll('a[href*="/followers"],a[href*="/verified_followers"]').forEach(a => {
-                                    push(a.textContent);
-                                    push(a.getAttribute('aria-label'));
-                                });
-                                document.querySelectorAll('[aria-label*="Followers" i]').forEach(el => {
-                                    push(el.getAttribute('aria-label'));
-                                });
-                                return out;
-                        }"""
-                )
-                for c in candidates or []:
-                        m = in_text_pat.search(c.replace(" ", ""))
-                        if m:
-                                t = m.group(1).upper()
-                                if pat.match(t):
-                                        return t, _count_text_to_int(t)
+            candidates = page.evaluate(
+                """() => {
+                    const out = [];
+                    const push = (v) => {
+                        const t = String(v || '').replace(/\s+/g, ' ').trim();
+                        if (t) out.push(t);
+                    };
+                    document.querySelectorAll('a[href*="/followers"],a[href*="/verified_followers"]').forEach(a => {
+                        push(a.textContent);
+                        push(a.getAttribute('aria-label'));
+                    });
+                    document.querySelectorAll('[aria-label*="Followers" i]').forEach(el => {
+                        push(el.getAttribute('aria-label'));
+                    });
+                    return out;
+                }"""
+            )
+            for c in candidates or []:
+                m = in_text_pat.search(c.replace(" ", ""))
+                if m:
+                    t = m.group(1).upper()
+                    if pat.match(t):
+                        return t, _count_text_to_int(t)
         except Exception:
-                pass
+            pass
 
     try:
         body_text = page.inner_text("body")
@@ -604,62 +551,45 @@ def _is_stale_date(date_str, max_age_days=45):
 def _collect_live_search_posts(page, seen_links, limit):
     """Collect recent posts from X search as fallback when profile posts are stale."""
     posts = []
-    
-    # Try multiple search queries in order of preference
     search_queries = [
-        "from:Arattai",  # Posts directly from account
-        "Arattai -is:retweet",  # Mentions without retweets
-        "Arattai has:images",  # Posts with images
-        "@Arattai",  # At mentions
+        "from:Arattai",
+        "Arattai -is:retweet",
+        "Arattai has:images",
+        "@Arattai",
     ]
-    
     for search_query in search_queries:
         if len(posts) >= limit:
             break
-        
         try:
             search_url = f"https://x.com/search?q={search_query.replace(' ', '%20')}&f=live"
             log.info(f"Searching: {search_query}")
             page.goto(search_url, wait_until="domcontentloaded", timeout=45000)
             time.sleep(4)
-
-            # Close overlays
             for sel in ['#layers', '[data-testid="BottomBar"]', '[data-testid="sheetDialog"]']:
                 try:
                     page.evaluate(f"document.querySelector('{sel}')?.remove()")
                 except:
                     pass
-
-            # Scroll and collect posts
-            for scroll_attempt in range(8):  # Increased from 6
+            for scroll_attempt in range(8):
                 tweet_nodes = page.query_selector_all('[data-testid="tweet"]')
-                found_new = False
-                
                 log.info(f"Search '{search_query}' scroll {scroll_attempt + 1}: {len(tweet_nodes)} tweets visible")
-                
                 for node in tweet_nodes:
                     if len(posts) >= limit:
                         return posts
-                    
                     try:
                         time_el = node.query_selector("time")
                         if not time_el:
                             continue
-                        
                         date_str = (time_el.get_attribute("datetime") or "")[:10]
                         link_el = time_el.evaluate_handle("el => el.closest('a')")
                         href = link_el.get_attribute("href") if link_el else ""
                         tweet_url = f"https://x.com{href}" if href and href.startswith("/") else href
-                        
                         if not tweet_url or tweet_url in seen_links:
                             continue
-
                         body_el = node.query_selector('[data-testid="tweetText"]')
                         body = body_el.inner_text().strip() if body_el else ""
-                        
                         if not body:
                             continue
-
                         seen_links.add(tweet_url)
                         posts.append({
                             "node": node,
@@ -669,42 +599,30 @@ def _collect_live_search_posts(page, seen_links, limit):
                             "stats": _parse_stats(node),
                             "datetime": (time_el.get_attribute("datetime") or ""),
                         })
-                        found_new = True
                         log.info(f"Found: {tweet_url} ({date_str})")
-                        
-                    except Exception as e:
+                    except Exception:
                         continue
-                
                 if len(posts) >= limit:
                     return posts
-                
-                # Only scroll if we're finding new posts
                 if scroll_attempt < 7:
                     page.mouse.wheel(0, 1600)
                     time.sleep(2)
-            
             if len(posts) >= limit:
                 break
-                
         except Exception as e:
             log.warning(f"Search query '{search_query}' failed: {e}")
             continue
-
     log.info(f"Live search collected {len(posts)} posts")
     return posts
 
 
 # ──────────────────────────────────────────────────────────
-#  MAIN SCRAPER
+#  SESSION MANAGEMENT
 # ──────────────────────────────────────────────────────────
 
-# Use absolute path for session file so it persists across runs and deployments
-# On Linux/Catalyst: check /tmp first (written by main.py), fall back to deploy dir
-# On Windows dev: use the backend directory directly
 if os.name == "nt":
     SESSION_FILE = str(_BACKEND_DIR / "x_session.json")
 else:
-    # _get_session_path() handles: env var X_SESSION_JSON → /tmp → backend dir
     SESSION_FILE = "/tmp/x_session.json"
 
 
@@ -723,7 +641,6 @@ def _save_session(context):
 
 def _validate_session_file():
     """Check if session file exists and has valid X auth cookies."""
-    # On Linux, also check deploy directory as fallback if /tmp not populated yet
     candidates = [SESSION_FILE]
     if os.name != "nt":
         deploy_path = str(_BACKEND_DIR / "x_session.json")
@@ -744,7 +661,6 @@ def _validate_session_file():
             has_ct0 = "ct0" in cookie_names
             if has_auth and has_ct0:
                 log.info(f"✓ Valid X session at: {path}")
-                # If found in deploy dir but not /tmp, copy it there now
                 if path != SESSION_FILE and os.name != "nt":
                     try:
                         import shutil
@@ -770,6 +686,10 @@ def _is_logged_in(page):
         return False
 
 
+# ──────────────────────────────────────────────────────────
+#  MAIN SCRAPER
+# ──────────────────────────────────────────────────────────
+
 def fetch_twitter_data():
     if not _PW_AVAIL:
         log.error("playwright not installed.")
@@ -781,7 +701,6 @@ def fetch_twitter_data():
     followers_count  = 0
 
     with sync_playwright() as pw:
-        # Resolve session path (checks X_SESSION_JSON env var, then /tmp, then backend dir)
         _resolved_session = _get_session_path() if os.name != "nt" else SESSION_FILE
         session_kwargs = {}
         _session_to_use = _resolved_session if _resolved_session and os.path.exists(_resolved_session) else None
@@ -810,7 +729,6 @@ def fetch_twitter_data():
                 "--disable-sync",
             ],
         )
-        # Use a smaller viewport to save RAM
         context = browser.new_context(
             viewport={"width": 1024, "height": 768},
             user_agent=(
@@ -827,8 +745,6 @@ def fetch_twitter_data():
         )
 
         page = context.new_page()
-
-        # Try going directly to profile — if session is valid, login is skipped
         log.info(f"Navigating to {X_PROFILE} to check session ...")
         page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=40000)
         time.sleep(5)
@@ -839,35 +755,30 @@ def fetch_twitter_data():
             log.info("Session expired or missing — logging in fresh ...")
             logged_in = _login(page)
             if logged_in:
-                _save_session(context)  # Save for next run
-            # Navigate to profile after login
+                _save_session(context)
             log.info(f"Navigating to {X_PROFILE} ...")
             page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=40000)
             time.sleep(5)
 
-        # Extract profile follower count for overview dashboard
         followers_text, followers_count = _extract_followers(page)
         if followers_text:
             log.info(f"Followers scraped: {followers_text} ({followers_count})")
         else:
             log.warning("Could not scrape follower count from profile header")
 
-
-        # Remove login walls / overlays / banners that block tweets
         overlay_selectors = [
-            '#layers', 
-            '[data-testid="BottomBar"]', 
+            '#layers',
+            '[data-testid="BottomBar"]',
             '[data-testid="sheetDialog"]',
-            'div[role="group"] > div > div > div > div > [role="button"]', # "Not now" button
-            '.r-12vffkv', # General overlay class
+            'div[role="group"] > div > div > div > div > [role="button"]',
+            '.r-12vffkv',
         ]
         for sel in overlay_selectors:
             try:
                 page.evaluate(f"document.querySelectorAll('{sel}').forEach(el => el.remove())")
             except Exception:
                 pass
-        
-        # Click "Not now" or similar if a dialog is present
+
         try:
             for text in ["Not now", "Refuse optional cookies", "Close"]:
                 btn = page.get_by_role("button", name=text).first
@@ -884,31 +795,24 @@ def fetch_twitter_data():
             browser.close()
             return _empty_twitter()
 
-        # Scroll a little to load more tweets past any pinned post
         page.mouse.wheel(0, 600)
         time.sleep(2)
 
         seen_links = set()
-        count = 0
         originals = []
         reposts = []
 
-        # Collect enough tweets by incremental scrolling.
         for attempt in range(6):
             tweet_nodes = page.query_selector_all('[data-testid="tweet"]')
             log.info(f"Scan {attempt + 1}: found {len(tweet_nodes)} tweet elements on profile.")
 
             for node in tweet_nodes:
                 try:
-                    # Read context label for filtering pinned/reposted rows.
                     social_ctx = node.query_selector('[data-testid="socialContext"]')
                     social_text = social_ctx.inner_text().lower() if social_ctx else ""
                     is_repost = "repost" in social_text
                     is_pinned = "pinned" in social_text
-                    
-                    # We now ALLOW pinned tweets because they are often the most important/recent news!
 
-                    # Try multiple ways to get the date if <time> is missing
                     date_str = ""
                     datetime_val = ""
                     time_el = node.query_selector("time")
@@ -916,19 +820,15 @@ def fetch_twitter_data():
                         datetime_val = time_el.get_attribute("datetime") or ""
                         date_str = datetime_val[:10]
                     else:
-                        # Fallback: check for relative time strings (e.g., "2h", "10m", "Now")
-                        log.info("Time tag missing or unusual, checking span texts...")
                         spans = node.query_selector_all("span")
                         for s in spans:
                             txt = s.inner_text().strip().lower()
-                            # Match "2h", "10m", "Now", "Just now"
                             if re.match(r'^(\d+[smh]|now|just now)$', txt):
                                 date_str = datetime.now().strftime("%Y-%m-%d")
                                 datetime_val = datetime.now().isoformat()
                                 break
-                            # Match "Apr 24"
                             if re.match(r'^[a-z]{3}\s\d{1,2}$', txt):
-                                date_str = f"2026-{txt}" # Approximated
+                                date_str = f"2026-{txt}"
                                 break
 
                     tweet_url = ""
@@ -944,7 +844,6 @@ def fetch_twitter_data():
 
                     body_el = node.query_selector('[data-testid="tweetText"]')
                     body = body_el.inner_text().strip() if body_el else ""
-                    # If no text, might be an image-only post, allow it if it has an image
                     if not body:
                         img_check = node.query_selector('img[src*="pbs.twimg.com/media/"]')
                         if not img_check:
@@ -960,7 +859,7 @@ def fetch_twitter_data():
                         "body": body,
                         "stats": stats,
                         "datetime": datetime_val,
-                        "is_pinned": is_pinned
+                        "is_pinned": is_pinned,
                     }
                     log.info(f"Found tweet: {tweet_url} | Date: {date_str}")
                     if is_repost:
@@ -972,26 +871,20 @@ def fetch_twitter_data():
 
             if len(originals) >= 5:
                 break
-
-            # If originals are fewer, keep scrolling and allow repost fallback.
             if (len(originals) + len(reposts)) >= 12:
                 break
 
             page.mouse.wheel(0, 1600)
             time.sleep(2)
 
-        # Sort: Pinned first, then by datetime (newest first)
         originals = sorted(originals, key=lambda x: (x.get("is_pinned", False), x.get("datetime", "")), reverse=True)
         reposts = sorted(reposts, key=lambda x: (x.get("is_pinned", False), x.get("datetime", "")), reverse=True)
 
-        # Set limit back to 5 but we will capture them sequentially to save RAM
         selected = originals[:5]
         if len(selected) < 5:
             need = 5 - len(selected)
             selected.extend(reposts[:need])
 
-        # If account timeline appears stale, fill with recent live mentions.
-        # More aggressive when not logged in - any post older than 14 days triggers fallback
         max_age = 14 if not _is_logged_in(page) else 45
         if selected and _is_stale_date(selected[0].get("date", ""), max_age_days=max_age):
             backup_selected = list(selected)
@@ -1000,8 +893,6 @@ def fetch_twitter_data():
             )
             selected = []
             selected.extend(_collect_live_search_posts(page, seen_links, 5))
-
-            # If live search is blocked/empty, keep account timeline posts rather than blank feed.
             if len(selected) < 5:
                 need = 5 - len(selected)
                 if backup_selected:
@@ -1014,24 +905,21 @@ def fetch_twitter_data():
             f"Recent post selection: originals={len(originals)}, reposts={len(reposts)}, selected={len(selected)}"
         )
 
+        count = 0
         for cand in selected:
-            # Screenshot
             shot_path = os.path.join(DATA_DIR, f"tweet_{count}.png")
             try:
-                # Primary strategy: capture directly from the profile timeline node
-                # (avoids login walls/rate limits that can appear on detail pages).
                 node = cand.get("node")
                 captured = False
                 if node:
                     try:
                         node.scroll_into_view_if_needed(timeout=5000)
-                        time.sleep(1) # Extra wait for image loading
+                        time.sleep(1)
                         node.screenshot(path=shot_path, type="jpeg", quality=70)
                         captured = os.path.exists(shot_path)
                     except Exception as e:
                         log.warning(f"Timeline node screenshot failed for post {count}: {e}")
-                
-                # If node capture failed, try detail page but keep it brief
+
                 if not captured:
                     try:
                         page.goto(cand["url"], wait_until="commit", timeout=30000)
@@ -1046,9 +934,8 @@ def fetch_twitter_data():
                 log.warning(f"Screenshot {count} failed: {e}")
                 screenshot_paths.append("")
 
-            # ── Extract and download images from the tweet node ──────────
             post_image_urls = []
-            post_image_inline = {}  # filename -> data URL (base64) for persistence
+            post_image_inline = {}
             node_for_images = cand.get("node")
             if node_for_images:
                 raw_img_urls = _extract_post_images(node_for_images)
@@ -1068,7 +955,6 @@ def fetch_twitter_data():
                     img_path = os.path.join(DATA_DIR, img_filename)
                     ok = _download_image(img_url, img_path, cookies=cookie_str)
                     if ok:
-                        # Inline as base64 data URL so it survives /tmp resets
                         inline_url = _file_to_data_url(img_path)
                         if inline_url:
                             post_image_inline[img_filename] = inline_url
@@ -1083,6 +969,7 @@ def fetch_twitter_data():
             raw_posts.append({
                 "url":                cand["url"],
                 "date":               cand["date"],
+                "datetime":           cand.get("datetime", ""),
                 "body":               cand["body"],
                 "stats":              cand["stats"],
                 "post_images":        post_image_urls,
@@ -1091,11 +978,10 @@ def fetch_twitter_data():
             log.info(f"Post {count}: {cand['url']} ({cand['date']})")
             count += 1
 
-        # Scrape comments — recreate page for each to clear memory
+        # Scrape comments
         for i, post in enumerate(raw_posts):
             log.info(f"Scraping comments for post {i} ...")
             try:
-                # Open a fresh page for each post to prevent memory leaks
                 temp_page = context.new_page()
                 post["comments"] = _scrape_comments(temp_page, post["url"])
                 temp_page.close()
@@ -1123,43 +1009,144 @@ def fetch_twitter_data():
             post["screenshot_url"] = ""
             continue
 
-        # Keep a data-url copy so server.py can serve /api/data/tweet_X.png even if local file is absent.
         shot_name = os.path.basename(screenshot_paths[i])
         inline_url = _file_to_data_url(screenshot_paths[i])
         if inline_url and shot_name:
             inline_screenshots[shot_name] = inline_url
 
-        # Also merge this post's post_images_inline into the global map
         for img_name, img_data_url in (post.get("post_images_inline") or {}).items():
             inline_screenshots[img_name] = img_data_url
 
         shot_url = next(url_iter, "")
         if not shot_url:
             shot_url = _local_file_url(screenshot_paths[i])
-        if shot_url.startswith("/api/data/"):
-            # Serve via backend's inline screenshot route instead of thum.io (avoids X login wall)
-            pass  # keep /api/data/ path — server.py will serve inline base64 from data.json
         post["screenshot_url"] = shot_url
 
-    log.info(f"Done – {len(raw_posts)} posts.")
+    log.info(f"Done – {len(raw_posts)} posts scraped fresh.")
     return {
-        "fetched_at":   datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "profile":      X_PROFILE,
-        "followers":    followers_text,
-        "followers_count": followers_count,
-        "recent_posts": raw_posts,
+        "fetched_at":        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "profile":           X_PROFILE,
+        "followers":         followers_text,
+        "followers_count":   followers_count,
+        "recent_posts":      raw_posts,
         "inline_screenshots": inline_screenshots,
     }
 
 
 def _empty_twitter():
     return {
-        "fetched_at":   datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "profile":      X_PROFILE,
-        "followers":    "",
-        "followers_count": 0,
-        "recent_posts": [],
+        "fetched_at":        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "profile":           X_PROFILE,
+        "followers":         "",
+        "followers_count":   0,
+        "recent_posts":      [],
+        "inline_screenshots": {},
     }
+
+
+# ──────────────────────────────────────────────────────────
+#  INCREMENTAL MERGE: new posts + old posts → top 5
+# ──────────────────────────────────────────────────────────
+
+def _merge_posts(new_posts, prev_posts, prev_inline_screenshots, max_posts=5):
+    """
+    Merge freshly scraped posts with previously saved posts.
+
+    Rules:
+      1. Dedup by URL (tweet permalink).
+      2. New posts take priority over old ones for all fields
+         EXCEPT screenshot_url and inline images — if a new scrape
+         failed to produce a screenshot for a URL that already had one,
+         the old screenshot is carried over.
+      3. Sort by datetime descending (newest first).
+      4. Keep top max_posts.
+      5. Rebuild inline_screenshots map to only contain entries for
+         posts that made it into the final top-5 (prevents unbounded growth).
+
+    Returns: (merged_posts, merged_inline_screenshots)
+    """
+    # Index previous posts by URL for O(1) lookup
+    prev_by_url = {p["url"]: p for p in prev_posts if p.get("url")}
+
+    # Build merged dict: URL → post data (new post wins on body/stats/comments)
+    merged_by_url = {}
+
+    # Start with ALL new posts
+    for p in new_posts:
+        url = p.get("url", "")
+        if not url:
+            continue
+        entry = dict(p)
+        # If this URL existed before and new scrape has no screenshot, carry old one
+        if not entry.get("screenshot_url") and url in prev_by_url:
+            old = prev_by_url[url]
+            old_shot = old.get("screenshot_url", "")
+            if old_shot:
+                entry["screenshot_url"] = old_shot
+                log.info(f"Carried over screenshot for existing URL: {url}")
+        # If new scrape has no comments but old has some, carry old comments
+        if not entry.get("comments") and url in prev_by_url:
+            old_comments = prev_by_url[url].get("comments", [])
+            if old_comments:
+                entry["comments"] = old_comments
+                log.info(f"Carried over {len(old_comments)} comments for: {url}")
+        merged_by_url[url] = entry
+
+    # Add OLD posts that are NOT in new scrape (they will sit behind new ones)
+    for p in prev_posts:
+        url = p.get("url", "")
+        if not url or url in merged_by_url:
+            continue
+        entry = dict(p)
+        # Repair stale /api/data/ screenshot URLs for old posts
+        shot = entry.get("screenshot_url", "")
+        if shot.startswith("/api/data/"):
+            # Keep it — server.py will serve it from inline_screenshots
+            pass
+        merged_by_url[url] = entry
+
+    # Sort: newest datetime first (empty datetime goes last)
+    all_posts = list(merged_by_url.values())
+    all_posts.sort(key=lambda x: x.get("datetime", ""), reverse=True)
+
+    # Keep top max_posts
+    top_posts = all_posts[:max_posts]
+
+    log.info(
+        f"Merge result: {len(new_posts)} new + {len(prev_posts)} prev "
+        f"→ {len(all_posts)} unique → top {len(top_posts)} kept"
+    )
+
+    # Rebuild inline_screenshots: only keep entries for posts in top_posts
+    surviving_urls = {p["url"] for p in top_posts if p.get("url")}
+    new_inline = {}
+
+    # Carry over OLD inline screenshots for surviving posts
+    for p in top_posts:
+        url = p.get("url", "")
+        if url in prev_by_url:
+            old = prev_by_url[url]
+            old_inline_map = old.get("post_images_inline", {})
+            for fname, data_url in old_inline_map.items():
+                if fname not in new_inline:
+                    new_inline[fname] = data_url
+            # Also carry screenshot inline from prev_inline_screenshots
+            shot = old.get("screenshot_url", "")
+            if shot.startswith("/api/data/"):
+                shot_fname = shot.replace("/api/data/", "")
+                if shot_fname in prev_inline_screenshots and shot_fname not in new_inline:
+                    new_inline[shot_fname] = prev_inline_screenshots[shot_fname]
+
+    # Add NEW inline screenshots (override old if same filename, which is fine)
+    for p in new_posts:
+        url = p.get("url", "")
+        if url not in surviving_urls:
+            continue
+        for fname, data_url in (p.get("post_images_inline") or {}).items():
+            new_inline[fname] = data_url
+        # screenshot inline is already in the new_inline_screenshots from fetch_twitter_data
+
+    return top_posts, new_inline
 
 
 # ──────────────────────────────────────────────────────────
@@ -1192,42 +1179,75 @@ def run_twitter_cycle():
             pass
         return {}
 
+    # Read current data.json (from /tmp on Linux, backend dir on Windows)
     data = _read_json_safe(DATA_FILE)
-    # Fallback sources can contain the full dashboard payload in case /tmp is partial.
+
+    # Fallback: pull from backend dir or public dir if /tmp is empty
     fallback_backend = _read_json_safe(str(_BACKEND_DIR / "data.json"))
-    fallback_public = _read_json_safe(str(_BACKEND_DIR.parent / "public" / "data.json"))
+    fallback_public  = _read_json_safe(str(_BACKEND_DIR.parent / "public" / "data.json"))
     for k, v in fallback_backend.items():
         data.setdefault(k, v)
     for k, v in fallback_public.items():
         data.setdefault(k, v)
 
-    # If the current scrape fails to return posts, keep last known good X data.
-    prev_twitter = data.get("twitter", {}) if isinstance(data, dict) else {}
-    prev_posts = prev_twitter.get("recent_posts", []) if isinstance(prev_twitter, dict) else []
-    if not twitter_data.get("recent_posts") and prev_posts:
-        log.warning("Twitter scrape returned 0 posts; preserving previous X posts/screenshots.")
-        repaired_posts = []
-        for p in prev_posts:
-            post_copy = dict(p)
-            if str(post_copy.get("screenshot_url", "")).startswith("/api/data/"):
-                post_copy["screenshot_url"] = _remote_tweet_screenshot(post_copy.get("url", ""))
-            repaired_posts.append(post_copy)
-        twitter_data["recent_posts"] = repaired_posts
+    # Previous twitter state
+    prev_twitter          = data.get("twitter", {}) if isinstance(data, dict) else {}
+    prev_posts            = prev_twitter.get("recent_posts", []) if isinstance(prev_twitter, dict) else []
+    prev_inline_shots     = prev_twitter.get("inline_screenshots", {}) if isinstance(prev_twitter, dict) else {}
+
+    new_posts    = twitter_data.get("recent_posts", [])
+    new_inline   = twitter_data.get("inline_screenshots", {})
+
+    if new_posts:
+        # ── INCREMENTAL MERGE ──────────────────────────────────────────────────
+        # Combine new_inline from the fresh scrape with prev_inline_shots so
+        # _merge_posts can carry forward old screenshot data for surviving posts.
+        combined_inline_prev = {**prev_inline_shots, **new_inline}
+        merged_posts, merged_inline = _merge_posts(
+            new_posts, prev_posts, combined_inline_prev, max_posts=5
+        )
+
+        twitter_data["recent_posts"]      = merged_posts
+        twitter_data["inline_screenshots"] = merged_inline
+
+        # Preserve follower count if new scrape missed it
         if not twitter_data.get("followers") and prev_twitter.get("followers"):
-            twitter_data["followers"] = prev_twitter.get("followers", "")
+            twitter_data["followers"]       = prev_twitter.get("followers", "")
+        if not twitter_data.get("followers_count") and prev_twitter.get("followers_count"):
+            twitter_data["followers_count"] = prev_twitter.get("followers_count", 0)
+
+    else:
+        # ── ZERO POSTS RETURNED: keep old data entirely ────────────────────────
+        log.warning("Twitter scrape returned 0 posts; preserving previous X data.")
+        # For old /api/data/ screenshot URLs: they're still served from inline_screenshots
+        twitter_data["recent_posts"]      = prev_posts
+        twitter_data["inline_screenshots"] = prev_inline_shots
+        if not twitter_data.get("followers") and prev_twitter.get("followers"):
+            twitter_data["followers"]       = prev_twitter.get("followers", "")
         if not twitter_data.get("followers_count") and prev_twitter.get("followers_count"):
             twitter_data["followers_count"] = prev_twitter.get("followers_count", 0)
 
     data["twitter"] = twitter_data
 
+    # ── Write data.json ─────────────────────────────────────────────────────────
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, ensure_ascii=False)
-        log.info(f"data.json updated – {len(twitter_data['recent_posts'])} posts.")
+        log.info(f"data.json updated – {len(twitter_data['recent_posts'])} posts saved.")
     except Exception as e:
-        log.error(f"Write failed: {e}")
+        log.error(f"Write failed to {DATA_FILE}: {e}")
 
-    # Sync to public/data.json for Vite dev server
+    # ── Also write to backend/data.json for persistence across Railway restarts ──
+    # Railway may wipe /tmp but the image layer (backend dir) persists between deploys.
+    backend_data_file = str(_BACKEND_DIR / "data.json")
+    try:
+        with open(backend_data_file, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, ensure_ascii=False)
+        log.info(f"Backup data.json written to {backend_data_file}")
+    except Exception as e:
+        log.warning(f"Could not write backup data.json: {e}")
+
+    # ── Sync to public/data.json for Vite dev server ───────────────────────────
     public_data = _BACKEND_DIR.parent / "public" / "data.json"
     try:
         public_data.parent.mkdir(parents=True, exist_ok=True)
@@ -1237,6 +1257,9 @@ def run_twitter_cycle():
         pass
 
     log.info("=== Twitter Cycle Complete ===")
+    log.info(
+        f"    Posts in data.json: {[p.get('url','?')[-40:] for p in twitter_data['recent_posts']]}"
+    )
 
 
 # ──────────────────────────────────────────────────────────

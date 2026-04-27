@@ -1,5 +1,5 @@
 """
-server.py — Catalyst AppSail entry point
+server.py — Flask entry point (Railway + Catalyst AppSail compatible)
 Serves the dashboard as static files and runs two background schedulers:
   1. General data fetcher (App Store, Play Store, News) — every 5 min
   2. Twitter screenshotter (Playwright + Catalyst upload)  — every 15 min
@@ -14,6 +14,8 @@ from flask import Flask, send_from_directory, jsonify, request, Response
 from flask_cors import CORS
 import requests as req_lib
 from bs4 import BeautifulSoup
+import json
+import base64
 
 # ── Import data fetcher ───────────────────────────────────
 from z1 import run_fetch_cycle, now
@@ -30,14 +32,16 @@ except ImportError as _te:
 from ai_review_analysis import analysis_bp
 
 # ── Directory Setup ──
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 
+# On Linux (Railway/Catalyst) we write runtime data to /tmp.
+# Backend dir is used as a durable fallback (persists in Docker image layer).
 if os.name == "nt":
-    DATA_DIR = str(BASE_DIR)
+    DATA_DIR     = str(BASE_DIR)
     SESSION_FILE = os.path.join(BASE_DIR, "x_session.json")
 else:
-    DATA_DIR = "/tmp"
+    DATA_DIR     = "/tmp"
     SESSION_FILE = "/tmp/x_session.json"
 
 # ── Twitter Session Restoration ──
@@ -54,10 +58,7 @@ app = Flask(__name__, static_folder="public", static_url_path="")
 CORS(app)
 app.register_blueprint(analysis_bp)
 
-import json
-import base64
-
-# Configure logging to console AND file for the web viewer
+# ── Logging ──────────────────────────────────────────────
 log_file = os.path.join(DATA_DIR, "app.log")
 logging.basicConfig(
     level=logging.INFO,
@@ -69,7 +70,30 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+
+# ── Helper: load data.json with fallbacks ────────────────
+
+def _load_data_json():
+    """
+    Try to load data.json from multiple locations in priority order:
+      1. /tmp/data.json  (runtime, most current)
+      2. backend/data.json  (persistent, from last write)
+      3. public/data.json  (Vite dev fallback)
+    Returns the path of the first file that exists, or None.
+    """
+    candidates = [
+        os.path.join(DATA_DIR, "data.json"),
+        os.path.join(BASE_DIR, "data.json"),
+        os.path.join(PUBLIC_DIR, "data.json"),
+    ]
+    for path in candidates:
+        if os.path.exists(path) and os.path.getsize(path) > 10:
+            return path
+    return None
+
+
 # ── Routes ────────────────────────────────────────────────
+
 @app.route("/logs")
 @app.route("/api/logs")
 def view_logs():
@@ -81,46 +105,57 @@ def view_logs():
             lines = f.readlines()
             if not lines:
                 return "Log file exists but is currently empty. Waiting for the first background task to start...", 200
-            # Return last 100 lines
             return Response("".join(lines[-100:]), mimetype="text/plain")
     except Exception as e:
         return f"Error reading logs: {e}", 500
+
+
 @app.route("/")
 def index():
     return send_from_directory(PUBLIC_DIR, "index.html")
 
+
 @app.route("/data.json")
 @app.route("/data")
 def data_json():
-    tmp_path = os.path.join(DATA_DIR, "data.json")
-    if os.path.exists(tmp_path):
-        return send_from_directory(DATA_DIR, "data.json")
-    return send_from_directory(BASE_DIR, "data.json")
+    """Serve data.json — checks /tmp first, then backend dir, then public dir."""
+    data_path = _load_data_json()
+    if data_path:
+        directory = os.path.dirname(data_path)
+        filename  = os.path.basename(data_path)
+        return send_from_directory(directory, filename)
+    return jsonify({"error": "data.json not found"}), 404
+
 
 @app.route("/api/data/<path:filename>")
 @app.route("/data/<path:filename>")
 def serve_backend_files(filename):
-    """Serve screenshots or other backend-generated files."""
-    # Prioritize /tmp on Linux, or BASE_DIR on Windows
-    disk_path = os.path.join(DATA_DIR, filename)
-    if os.path.exists(disk_path):
-        return send_from_directory(DATA_DIR, filename)
+    """
+    Serve screenshots or other backend-generated files.
+    Priority:
+      1. File exists on disk (/tmp or backend dir)
+      2. Serve inline base64 from data.json → twitter.inline_screenshots
+    """
+    # Check /tmp first, then backend dir
+    for search_dir in [DATA_DIR, BASE_DIR]:
+        disk_path = os.path.join(search_dir, filename)
+        if os.path.exists(disk_path):
+            return send_from_directory(search_dir, filename)
 
     # Fallback: serve inline base64 data from data.json
     try:
-        data_path = os.path.join(DATA_DIR, "data.json")
-        if os.path.exists(data_path):
+        data_path = _load_data_json()
+        if data_path:
             with open(data_path, "r", encoding="utf-8") as fh:
                 payload = json.load(fh)
-            
-            # The structure is twitter -> inline_screenshots
-            tw = payload.get("twitter", {})
+
+            tw         = payload.get("twitter", {})
             inline_map = tw.get("inline_screenshots", {})
-            data_url = inline_map.get(filename, "")
-            
+            data_url   = inline_map.get(filename, "")
+
             if isinstance(data_url, str) and data_url.startswith("data:image/"):
                 mime = "image/png" if ".png" in filename.lower() else "image/jpeg"
-                b64 = data_url.split(",", 1)[1]
+                b64  = data_url.split(",", 1)[1]
                 return Response(base64.b64decode(b64), mimetype=mime)
     except Exception as e:
         log.error(f"[server] Inline serve failed for {filename}: {e}")
@@ -130,12 +165,12 @@ def serve_backend_files(filename):
 
 def resolve_google_news_url(url):
     """Decode Google News CBM base64 URL to get the real article URL."""
-    import base64, re
+    import base64 as _b64, re
     try:
         if "/articles/CBM" in url:
             cbm = url.split("/articles/")[1].split("?")[0]
             cbm += "=" * ((4 - len(cbm) % 4) % 4)
-            raw  = base64.urlsafe_b64decode(cbm)
+            raw  = _b64.urlsafe_b64decode(cbm)
             urls = re.findall(b"https?://[^\x00-\x20\"'<>]+", raw)
             if urls:
                 return urls[-1].decode("utf-8", errors="ignore")
@@ -287,16 +322,15 @@ def trigger_fetch():
 _TWITTER_BUSY = False
 _TWITTER_LOCK = threading.Lock()
 
+
 @app.route("/x-session/status")
 def x_session_status():
     """Check if X session exists and is valid."""
     from twitter_fetcher import _validate_session_file
-    from pathlib import Path
-    session_file = Path(BASE_DIR) / "x_session.json"
     is_valid = _validate_session_file()
     return jsonify({
         "has_session": is_valid,
-        "session_file": str(session_file),
+        "session_file": str(SESSION_FILE),
         "message": "Session found ✓" if is_valid else "No valid session — please log in",
         "login_url": "/x-session/login",
     })
@@ -305,10 +339,8 @@ def x_session_status():
 @app.route("/x-session/login")
 def x_session_login():
     """Start interactive X login (headful browser). Visit this URL to log in manually."""
-    from pathlib import Path
     from twitter_fetcher import _validate_session_file, _save_session, run_twitter_cycle
-    import json as json_lib
-    # Check if already logged in with valid session
+
     if _validate_session_file():
         return jsonify({
             "status": "already_logged_in",
@@ -316,22 +348,20 @@ def x_session_login():
             "session_file": str(SESSION_FILE),
             "next_action": "Visit /trigger-twitter to fetch and screenshot posts",
         }), 200
-    
-    # Start login in background thread
+
     def _interactive_login():
         try:
             from playwright.sync_api import sync_playwright
             import time as time_lib
-            
+
             log.info("[X-Login] Starting interactive login browser...")
-            
+
             with sync_playwright() as pw:
-                # Headful browser for manual login
                 browser = pw.chromium.launch(
-                    headless=True,  # Always headless on server — use cookie upload instead
-                    args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--start-maximized", "--disable-blink-features=AutomationControlled"],
+                    headless=True,
+                    args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+                          "--disable-gpu", "--start-maximized", "--disable-blink-features=AutomationControlled"],
                 )
-                
                 context = browser.new_context(
                     viewport={"width": 1280, "height": 900},
                     user_agent=(
@@ -341,20 +371,14 @@ def x_session_login():
                     ),
                     locale="en-US",
                 )
-                
                 page = context.new_page()
                 page.goto("https://x.com/i/flow/login", wait_until="domcontentloaded", timeout=60000)
                 log.info("[X-Login] ✓ Browser opened. Waiting for user login (180 seconds timeout)...")
-                
-                # Wait for user to complete login
                 time_lib.sleep(180)
-                
-                # Save session using proper method
+
                 log.info("[X-Login] Saving authenticated session...")
                 if _save_session(context):
                     log.info("[X-Login] ✓ Session saved successfully")
-                    # Auto-trigger Twitter fetch to capture screenshots
-                    log.info("[X-Login] Auto-triggering Twitter fetch with screenshots...")
                     global _TWITTER_BUSY
                     if not _TWITTER_BUSY:
                         try:
@@ -367,17 +391,16 @@ def x_session_login():
                             _TWITTER_BUSY = False
                 else:
                     log.error("[X-Login] Failed to save session")
-                
+
                 browser.close()
                 log.info("[X-Login] Browser closed")
-                
+
         except Exception as e:
             log.error(f"[X-Login] Interactive login error: {e}", exc_info=True)
-    
-    # Run in background thread
+
     login_thread = threading.Thread(target=_interactive_login, daemon=True)
     login_thread.start()
-    
+
     return jsonify({
         "status": "login_started",
         "message": "✓ Browser window will open in 2-3 seconds. Please log in to X.",
@@ -400,9 +423,7 @@ def x_session_login():
 def trigger_twitter():
     """Manual trigger — force a Twitter screenshot refresh immediately."""
     from twitter_fetcher import _validate_session_file
-    from pathlib import Path
-    
-    # Check if valid session exists
+
     if not _validate_session_file():
         return jsonify({
             "status": "no_valid_session",
@@ -410,11 +431,11 @@ def trigger_twitter():
             "login_url": "/x-session/login",
             "session_check_url": "/x-session/status",
         }), 401
-    
+
     global _TWITTER_BUSY
     if not _TWITTER_AVAIL:
         return jsonify({"status": "error", "message": "twitter_fetcher not available"}), 503
-    
+
     with _TWITTER_LOCK:
         if _TWITTER_BUSY:
             return jsonify({
@@ -423,7 +444,7 @@ def trigger_twitter():
                 "time": now()
             }), 429
         _TWITTER_BUSY = True
-        
+
     def _manual_wrapper():
         global _TWITTER_BUSY
         try:
@@ -436,10 +457,12 @@ def trigger_twitter():
     thread.start()
     return jsonify({"status": "twitter fetch started", "time": now()})
 
+
 # ── Background scheduler: general data (every 5 min) ─────
 FETCH_INTERVAL_MINUTES   = 5
 # ── Background scheduler: Twitter screenshots (every 15 min) ─
 TWITTER_INTERVAL_MINUTES = 15
+
 
 def scheduler_loop():
     log.info(f"[scheduler] General fetcher starting. Interval: {FETCH_INTERVAL_MINUTES} min.")
@@ -460,8 +483,8 @@ def scheduler_loop():
 def twitter_scheduler_loop():
     """
     Runs the Twitter screenshot cycle every 15 minutes:
-      1. Fetch 5 recent @Arattai posts + screenshots
-      2. Upload screenshots to Catalyst (delete previous)
+      1. Fetch recent @Arattai posts + screenshots
+      2. Merge with previous posts (top 5 kept, newest first)
       3. Update data.json
     """
     if not _TWITTER_AVAIL:
@@ -470,7 +493,6 @@ def twitter_scheduler_loop():
 
     log.info(f"[twitter-scheduler] Starting. Interval: {TWITTER_INTERVAL_MINUTES} min.")
 
-    # Initial run with a short delay to let the main fetch settle first
     try:
         time.sleep(15)
         run_twitter_cycle()
@@ -504,8 +526,17 @@ def start_background_scheduler():
     """
     global _TWITTER_BUSY
 
-    # ── On startup: Check session AND Chromium before fetching ──
-    # Check /tmp first (written from X_SESSION_JSON env var), then backend dir
+    # Seed /tmp/data.json from backend dir if /tmp is empty (fresh Railway restart)
+    tmp_data = os.path.join(DATA_DIR, "data.json")
+    backend_data = os.path.join(BASE_DIR, "data.json")
+    if not os.path.exists(tmp_data) and os.path.exists(backend_data):
+        try:
+            import shutil
+            shutil.copy2(backend_data, tmp_data)
+            log.info(f"[startup] Seeded {tmp_data} from {backend_data}")
+        except Exception as e:
+            log.warning(f"[startup] Could not seed data.json: {e}")
+
     session_file = Path("/tmp/x_session.json") if os.path.exists("/tmp/x_session.json") else Path(BASE_DIR) / "x_session.json"
     chromium_ok  = _chromium_ready()
 
@@ -523,7 +554,7 @@ def start_background_scheduler():
         log.warning("[startup] ⚠️  Chromium not ready yet — skipping startup fetch. Scheduler will retry in 15 min.")
     elif not session_file.exists():
         log.warning("[startup] ⚠️  No X session found. Visit /x-session/login to set up.")
-    
+
     # ── General data fetcher thread ──
     t1 = threading.Thread(target=scheduler_loop, daemon=True, name="fetcher-scheduler")
     t1.start()
@@ -533,9 +564,6 @@ def start_background_scheduler():
     t2 = threading.Thread(target=twitter_scheduler_loop, daemon=True, name="twitter-scheduler")
     t2.start()
     log.info("[twitter-scheduler] Twitter screenshot thread launched.")
-
-
-# ── Schedulers are started by main.py after server binds ─
 
 
 # ── Dev server ────────────────────────────────────────────
