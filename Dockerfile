@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── Working directory ───────────────────────────────────────────
 WORKDIR /app/backend
 
-# ── Python dependencies ────────────────────────────────────────
+# ── Python dependencies (Split to identify failures) ──────────
 COPY backend/requirements.txt ./
 RUN pip install --upgrade pip
 RUN pip install flask flask-cors requests beautifulsoup4 schedule gunicorn Pillow
@@ -65,11 +65,9 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8080 \
     ENABLE_CATALYST_UPLOAD=0
 
-# ── Ensure /tmp is writable (Railway mounts /tmp as tmpfs) ──────
-RUN mkdir -p /tmp && chmod 1777 /tmp
-
 # ── Port ────────────────────────────────────────────────────────
 EXPOSE 8080
 
 # ── Start ───────────────────────────────────────────────────────
+# Bypass run.sh (no pip install needed — everything is pre-baked)
 CMD ["python", "main.py"]

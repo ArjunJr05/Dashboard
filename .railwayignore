@@ -57,9 +57,8 @@ catalyst_appsail/
 *.exe
 *.bin
 
-# ── NOTE: data.json files are intentionally NOT ignored ──
-# backend/data.json is baked into the Docker image and serves as
-# the seed/fallback when /tmp is wiped after a Railway restart.
-# The Dockerfile COPY backend/ ./ already includes it.
+# ── Large runtime-generated data (fetched fresh on start) ─
+data.json
+backend/data.json
 
 # NOTE: backend/x_session.json is intentionally included — needed at startup

@@ -1,8 +1,15 @@
 """
-server.py — Flask entry point (Railway + Catalyst AppSail compatible)
+server.py — Catalyst AppSail entry point
 Serves the dashboard as static files and runs two background schedulers:
   1. General data fetcher (App Store, Play Store, News) — every 5 min
   2. Twitter screenshotter (Playwright + Catalyst upload)  — every 15 min
+
+KEY BEHAVIOUR (v2 — incremental X post merge):
+  - twitter_fetcher.run_twitter_cycle() now MERGES new posts with previously
+    saved ones (dedup by URL, sort newest-first, keep top 5).
+  - data.json is written to both /tmp (runtime) AND backend/data.json (durable).
+  - On Catalyst restart, server.py seeds /tmp/data.json from backend/data.json
+    so the frontend always has stale-but-valid data while the first scrape runs.
 """
 
 import os
@@ -35,8 +42,6 @@ from ai_review_analysis import analysis_bp
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 
-# On Linux (Railway/Catalyst) we write runtime data to /tmp.
-# Backend dir is used as a durable fallback (persists in Docker image layer).
 if os.name == "nt":
     DATA_DIR     = str(BASE_DIR)
     SESSION_FILE = os.path.join(BASE_DIR, "x_session.json")
@@ -71,15 +76,14 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-# ── Helper: load data.json with fallbacks ────────────────
-
+# ── Helper: load data.json with fallbacks ─────────────────
 def _load_data_json():
     """
-    Try to load data.json from multiple locations in priority order:
-      1. /tmp/data.json  (runtime, most current)
-      2. backend/data.json  (persistent, from last write)
-      3. public/data.json  (Vite dev fallback)
-    Returns the path of the first file that exists, or None.
+    Try data.json from multiple locations in priority order:
+      1. /tmp/data.json         — runtime (most current)
+      2. backend/data.json      — durable backup written by twitter_fetcher
+      3. public/data.json       — Vite dev fallback
+    Returns the path of the first file that exists and is non-empty.
     """
     candidates = [
         os.path.join(DATA_DIR, "data.json"),
@@ -124,7 +128,7 @@ def data_json():
         directory = os.path.dirname(data_path)
         filename  = os.path.basename(data_path)
         return send_from_directory(directory, filename)
-    return jsonify({"error": "data.json not found"}), 404
+    return jsonify({"error": "data.json not found yet"}), 404
 
 
 @app.route("/api/data/<path:filename>")
@@ -134,7 +138,7 @@ def serve_backend_files(filename):
     Serve screenshots or other backend-generated files.
     Priority:
       1. File exists on disk (/tmp or backend dir)
-      2. Serve inline base64 from data.json → twitter.inline_screenshots
+      2. Serve inline base64 from twitter.inline_screenshots in data.json
     """
     # Check /tmp first, then backend dir
     for search_dir in [DATA_DIR, BASE_DIR]:
@@ -142,7 +146,7 @@ def serve_backend_files(filename):
         if os.path.exists(disk_path):
             return send_from_directory(search_dir, filename)
 
-    # Fallback: serve inline base64 data from data.json
+    # Fallback: serve inline base64 from data.json
     try:
         data_path = _load_data_json()
         if data_path:
@@ -176,7 +180,6 @@ def resolve_google_news_url(url):
                 return urls[-1].decode("utf-8", errors="ignore")
     except Exception:
         pass
-
     try:
         r = req_lib.get(
             url, timeout=10, allow_redirects=True,
@@ -360,7 +363,7 @@ def x_session_login():
                 browser = pw.chromium.launch(
                     headless=True,
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
-                          "--disable-gpu", "--start-maximized", "--disable-blink-features=AutomationControlled"],
+                          "--disable-gpu", "--disable-blink-features=AutomationControlled"],
                 )
                 context = browser.new_context(
                     viewport={"width": 1280, "height": 900},
@@ -373,7 +376,7 @@ def x_session_login():
                 )
                 page = context.new_page()
                 page.goto("https://x.com/i/flow/login", wait_until="domcontentloaded", timeout=60000)
-                log.info("[X-Login] ✓ Browser opened. Waiting for user login (180 seconds timeout)...")
+                log.info("[X-Login] ✓ Browser opened. Waiting for login (180 seconds timeout)...")
                 time_lib.sleep(180)
 
                 log.info("[X-Login] Saving authenticated session...")
@@ -384,7 +387,7 @@ def x_session_login():
                         try:
                             _TWITTER_BUSY = True
                             run_twitter_cycle()
-                            log.info("[X-Login] ✓ Twitter fetch and screenshot capture complete")
+                            log.info("[X-Login] ✓ Twitter fetch complete")
                         except Exception as e:
                             log.error(f"[X-Login] Auto-fetch failed: {e}")
                         finally:
@@ -393,7 +396,6 @@ def x_session_login():
                     log.error("[X-Login] Failed to save session")
 
                 browser.close()
-                log.info("[X-Login] Browser closed")
 
         except Exception as e:
             log.error(f"[X-Login] Interactive login error: {e}", exc_info=True)
@@ -403,14 +405,13 @@ def x_session_login():
 
     return jsonify({
         "status": "login_started",
-        "message": "✓ Browser window will open in 2-3 seconds. Please log in to X.",
+        "message": "✓ Login flow started. Please complete login via X.",
         "instructions": [
             "1. A browser window will open shortly",
             "2. Log in with your X account credentials",
             "3. Complete all login steps (including 2FA if prompted)",
             "4. Wait for browser to auto-close (~3 minutes timeout)",
             "5. Session will be saved automatically",
-            "6. Screenshots will be captured on first fetch",
         ],
         "session_file": str(SESSION_FILE),
         "check_status_url": "/x-session/status",
@@ -440,7 +441,7 @@ def trigger_twitter():
         if _TWITTER_BUSY:
             return jsonify({
                 "status": "already_running",
-                "message": "Twitter fetch already in progress. Please wait for current cycle to finish.",
+                "message": "Twitter fetch already in progress. Please wait.",
                 "time": now()
             }), 429
         _TWITTER_BUSY = True
@@ -458,9 +459,8 @@ def trigger_twitter():
     return jsonify({"status": "twitter fetch started", "time": now()})
 
 
-# ── Background scheduler: general data (every 5 min) ─────
+# ── Scheduler intervals ───────────────────────────────────
 FETCH_INTERVAL_MINUTES   = 5
-# ── Background scheduler: Twitter screenshots (every 15 min) ─
 TWITTER_INTERVAL_MINUTES = 15
 
 
@@ -471,7 +471,6 @@ def scheduler_loop():
         run_fetch_cycle()
     except Exception as e:
         log.error(f"[scheduler] Initial fetch failed: {e}")
-
     while True:
         time.sleep(FETCH_INTERVAL_MINUTES * 60)
         try:
@@ -482,17 +481,14 @@ def scheduler_loop():
 
 def twitter_scheduler_loop():
     """
-    Runs the Twitter screenshot cycle every 15 minutes:
-      1. Fetch recent @Arattai posts + screenshots
-      2. Merge with previous posts (top 5 kept, newest first)
-      3. Update data.json
+    Runs the Twitter screenshot + merge cycle every 15 minutes.
+    New posts are merged on top of old ones (top 5 kept, newest first).
     """
     if not _TWITTER_AVAIL:
         log.warning("[twitter-scheduler] twitter_fetcher unavailable – thread exiting.")
         return
 
     log.info(f"[twitter-scheduler] Starting. Interval: {TWITTER_INTERVAL_MINUTES} min.")
-
     try:
         time.sleep(15)
         run_twitter_cycle()
@@ -510,7 +506,7 @@ def twitter_scheduler_loop():
 def _chromium_ready():
     """Check if Playwright Chromium binary actually exists on disk."""
     import glob
-    pw_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/app/pw-browsers")
+    pw_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/tmp/pw-browsers")
     matches = glob.glob(f"{pw_path}/**/chrome-headless-shell", recursive=True) + \
               glob.glob(f"{pw_path}/**/chromium", recursive=True) + \
               glob.glob(f"{pw_path}/**/chrome", recursive=True)
@@ -519,24 +515,29 @@ def _chromium_ready():
 
 def start_background_scheduler():
     """
-    Initialize background tasks:
-    1. Check if X session exists on startup
-    2. If yes, AND Chromium is ready, immediately fetch Twitter data
-    3. Start regular schedulers (general data every 5min, Twitter every 15min)
+    Initialize background tasks on Catalyst AppSail:
+    1. Seed /tmp/data.json from backend/data.json if /tmp is empty (fresh container).
+    2. If X session + Chromium both available, run initial Twitter fetch.
+    3. Start general (5 min) and Twitter (15 min) scheduler loops.
     """
+    import shutil as _shutil
     global _TWITTER_BUSY
 
-    # Seed /tmp/data.json from backend dir if /tmp is empty (fresh Railway restart)
-    tmp_data = os.path.join(DATA_DIR, "data.json")
-    backend_data = os.path.join(BASE_DIR, "data.json")
+    # ── Seed /tmp/data.json from durable backend/data.json ──────────────────
+    # Catalyst containers start with a fresh /tmp every deployment.
+    # twitter_fetcher writes to BOTH /tmp/data.json AND backend/data.json.
+    # On the next boot we copy backend/data.json → /tmp/data.json so the
+    # frontend immediately has last-known posts while the first scrape runs.
+    tmp_data     = os.path.join(DATA_DIR, "data.json")     # /tmp/data.json
+    backend_data = os.path.join(BASE_DIR, "data.json")     # backend/data.json
     if not os.path.exists(tmp_data) and os.path.exists(backend_data):
         try:
-            import shutil
-            shutil.copy2(backend_data, tmp_data)
-            log.info(f"[startup] Seeded {tmp_data} from {backend_data}")
+            _shutil.copy2(backend_data, tmp_data)
+            log.info(f"[startup] ✓ Seeded {tmp_data} from {backend_data} (fresh container)")
         except Exception as e:
             log.warning(f"[startup] Could not seed data.json: {e}")
 
+    # ── Check X session + Chromium before auto-fetching ──────────────────────
     session_file = Path("/tmp/x_session.json") if os.path.exists("/tmp/x_session.json") else Path(BASE_DIR) / "x_session.json"
     chromium_ok  = _chromium_ready()
 
