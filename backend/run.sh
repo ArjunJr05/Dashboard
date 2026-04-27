@@ -8,28 +8,32 @@ export HOME="/tmp"
 echo "[run.sh] Python: $(python3 --version 2>&1)"
 echo "[run.sh] Port: $PORT"
 
-# Install ESSENTIAL dependencies only (fast)
-echo "[run.sh] Installing core dependencies..."
-python3 -m pip install flask flask-cors beautifulsoup4 requests --user --quiet
+# 1. Fix PATH to include the local bin where gunicorn/flask are installed
+export PATH="/tmp/.local/bin:$PATH"
 
-# Start the server IMMEDIATELY in the foreground
-# The Twitter and News schedulers already have built-in delays (30s)
-# to wait for background tasks like playwright and remaining pip installs.
-echo "[run.sh] Starting server to bind port..."
+# 2. Install ESSENTIAL dependencies (no-cache to save space)
+echo "[run.sh] Installing core dependencies (space-saving mode)..."
+python3 -m pip install flask flask-cors beautifulsoup4 requests gunicorn --user --quiet --no-cache-dir
+
+# 3. Start the server IMMEDIATELY (using full path to gunicorn just in case)
+echo "[run.sh] Starting server with Gunicorn on port $PORT..."
 (
-  # Install the rest in the background
-  python3 -m pip install -r requirements.txt --user --quiet
-  python3 -m pip install app-store-scraper --no-deps --user --quiet
+  # 4. Background tasks: Install rest + Playwright
+  echo "[run.sh] Background tasks starting..." >> /tmp/run.log
+  python3 -m pip install -r requirements.txt --user --quiet --no-cache-dir
+  python3 -m pip install app-store-scraper --no-deps --user --quiet --no-cache-dir
   
-  # Install Playwright
+  # Clear pip cache immediately to free up space for Playwright
+  python3 -m pip cache purge > /dev/null 2>&1
+  rm -rf /tmp/.cache/pip
+  
+  # Install ONLY Chromium (saves ~400MB vs full install)
   python3 -m playwright install chromium
-  python3 -m playwright install-deps chromium || true
   
-  echo "[run.sh] Background deps and Playwright complete."
+  echo "[run.sh] Background tasks complete." >> /tmp/run.log
   touch /tmp/pw-ready
 ) &
 
-# Start the server IMMEDIATELY using Gunicorn (production grade)
-echo "[run.sh] Starting server with Gunicorn on port $PORT..."
-exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 0 server:app
+# Use the full path to gunicorn to be 100% sure
+exec /tmp/.local/bin/gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 0 server:app
 
