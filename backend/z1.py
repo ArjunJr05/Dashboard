@@ -273,12 +273,11 @@ def fetch_playstore():
         if details:
             res_data["rating"] = round(details.get('score', 4.6), 1)
 
-            # Use 'ratings' for full star count (higher, more accurate per your screenshot)
-            res_data["rating_count"] = details.get('ratings', 225985)
+            # The 'reviews' field in Play Store is what displays as '226k reviews' in the app
+            res_data["rating_count"] = details.get('reviews', details.get('ratings', 226000))
             
             # Extract downloads
             res_data["downloads"] = details.get('installs', None)
-            # Parse numeric downloads count (e.g., "10,000,000+" -> 17362871)
             try:
                 installs_str = details.get('installs', '').replace(',', '').replace('+', '')
                 if installs_str:
@@ -339,28 +338,61 @@ def fetch_google_news():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
+    # Try multiple queries to ensure we get results
+    queries = [
+        "Arattai OR \"Arattai App\" OR \"Zoho Arattai\"",
+        "Zoho Corporation news",
+        "Messaging app India Arattai"
+    ]
+    
     try:
-        rss_url = "https://news.google.com/rss/search?q=Arattai+OR+Zoho+messaging+OR+Vembu+Arattai&hl=en-IN&gl=IN&ceid=IN:en"
-        r = requests.get(rss_url, headers=HEADERS, timeout=10)
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(r.text)
-        
-        feed_items = root.findall('./channel/item')
-        for item in feed_items:
-            if len(posts) >= 15: break 
-            find_title = item.find('title'); find_link = item.find('link'); find_pub = item.find('pubDate'); find_src = item.find('source')
-            t = find_title.text if find_title is not None else ""; link = find_link.text if find_link is not None else ""; pub = find_pub.text if find_pub is not None else ""; src = find_src.text if find_src is not None else "News"
-            if t.endswith(f" - {src}"): t = t[:-(len(src) + 3)]
-            summary, actual_url, image = get_summary(link, t, "Catch the latest updates on Arattai, India's own secure messaging platform.")
-            image_to_use = image if image else ""
-            # Drop article only if it's Google's generic fallback body
-            is_google_fallback = "Comprehensive, up-to-date" in summary or "aggregated from sources" in summary
-            if not is_google_fallback:
-                posts.append({"title": t, "url": link, "resolved_url": actual_url, "date": pub, "source": src, "body": summary, "image": image_to_use})
-                print(f"[news] ✓ {src}: {t[:50]}")
-                time.sleep(0.3)
-            else:
-                print(f"[news] ✗ Dropped '{t[:50]}' (google_fallback_body)")
+        for q in queries:
+            if len(posts) >= 5: break # Got enough fresh news
+            
+            rss_url = f"https://news.google.com/rss/search?q={requests.utils.quote(q)}&hl=en-IN&gl=IN&ceid=IN:en"
+            r = requests.get(rss_url, headers=HEADERS, timeout=10)
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(r.text)
+            
+            feed_items = root.findall('./channel/item')
+            for item in feed_items:
+                if len(posts) >= 15: break 
+                find_title = item.find('title'); find_link = item.find('link'); find_pub = item.find('pubDate'); find_src = item.find('source')
+                t = find_title.text if find_title is not None else ""; link = find_link.text if find_link is not None else ""; pub = find_pub.text if find_pub is not None else ""; src = find_src.text if find_src is not None else "News"
+                
+                # Deduplicate by title
+                if any(p['title'] == t for p in posts): continue
+                
+                if t.endswith(f" - {src}"): t = t[:-(len(src) + 3)]
+                summary, actual_url, image = get_summary(link, t, "Catch the latest updates on Arattai, India's own secure messaging platform.")
+                
+                # If no image found, use the Arattai placeholder instead of dropping
+                image_to_use = image if image else PLACEHOLDER
+                
+                # Format Date: Try to convert RSS date to YYYY-MM-DD
+                display_date = pub
+                try:
+                    dt = email.utils.parsedate_to_datetime(pub)
+                    display_date = dt.strftime("%Y-%m-%d")
+                except: pass
+
+                is_google_fallback = "Comprehensive, up-to-date" in summary or "aggregated from sources" in summary
+                if not is_google_fallback:
+                    posts.append({
+                        "title": t, 
+                        "url": link, 
+                        "resolved_url": actual_url, 
+                        "date": display_date, 
+                        "source": src, 
+                        "body": summary, 
+                        "image": image_to_use
+                    })
+                    print(f"[news] ✓ {src}: {t[:50]}")
+                    time.sleep(0.2)
+    
+    except Exception as e:
+        print(f"Error news: {e}")
+        if not posts: posts = CURATED_FALLBACK
 
         # 🔥 SAFETY FALLBACK: If fresh search is empty, inject curated classics 🔥
         if not posts:

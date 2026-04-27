@@ -182,13 +182,13 @@
                     <div class="ov-rating-stars">
                       <span v-for="i in 5" :key="i" class="ov-star" :class="getStarClass(ios.rating||4.7, i)"></span>
                     </div>
-                    <div class="ov-rating-count">{{ ios.total_ratings ? fmtNum(ios.total_ratings) : '19.4k' }}</div>
+                    <div class="ov-rating-count">{{ ios.rating_count ? fmtCompact(ios.rating_count) : '19.4k' }}</div>
                     <div class="ov-rating-unit">Happy Users</div>
                   </div>
                 </div>
 
                 <div class="ov-card-footer-bar">
-                  <div class="ov-footer-fill" style="width: 94%"></div>
+                  <div class="ov-footer-fill" :style="{width: ((ios.rating||4.7)/5 * 100) + '%'}"></div>
                 </div>
               </div>
 
@@ -232,13 +232,13 @@
                     <div class="ov-rating-stars">
                       <span v-for="i in 5" :key="i" class="ov-star" :class="getStarClass(android.rating||4.6, i)"></span>
                     </div>
-                    <div class="ov-rating-count">{{ android.total_ratings ? fmtNum(android.total_ratings) : '229k' }}</div>
+                    <div class="ov-rating-count">{{ android.rating_count ? fmtCompact(android.rating_count) : '229k' }}</div>
                     <div class="ov-rating-unit">Android Voices</div>
                   </div>
                 </div>
 
                 <div class="ov-card-footer-bar">
-                  <div class="ov-footer-fill" style="width: 92%"></div>
+                  <div class="ov-footer-fill" :style="{width: ((android.rating||4.6)/5 * 100) + '%'}"></div>
                 </div>
               </div>
 
@@ -964,6 +964,13 @@ function scheduleNextTwitter(){
 
 function getStarClass(rating,index){const diff=rating-(index-1);if(diff>=.75)return 'star-full';if(diff>=.25)return 'star-half';return 'star-empty'}
 function fmtNum(n){return new Intl.NumberFormat('en-IN').format(n)}
+function fmtCompact(n){
+  if (!n) return '0'
+  return new Intl.NumberFormat('en-US', { 
+    notation: 'compact', 
+    maximumFractionDigits: 1 
+  }).format(n).toLowerCase()
+}
 
 function onKey(e){
   if(e.key==='ArrowRight'||e.key==='ArrowDown')go(nextEnabledSlide(cur.value,1))
