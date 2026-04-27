@@ -390,6 +390,7 @@ def fetch_google_news():
             # Fallback to a very broad search if specific ones failed
             broad_url = "https://news.google.com/rss/search?q=Arattai+app+India&hl=en-IN&gl=IN&ceid=IN:en"
             r = requests.get(broad_url, headers=HEADERS, timeout=10)
+            import xml.etree.ElementTree as ET
             root = ET.fromstring(r.text)
             for item in root.findall('./channel/item')[:5]:
                 t = item.find('title').text; link = item.find('link').text
@@ -404,10 +405,6 @@ def fetch_google_news():
 
     if not posts:
         print(f"[{now()}] WARNING: All searches failed. Using curated fallback.")
-        posts = CURATED_FALLBACK
-            
-    except Exception as e:
-        print(f"Error news: {e}")
         posts = CURATED_FALLBACK
         
     return {"posts": posts}
