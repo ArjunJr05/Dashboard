@@ -26,7 +26,7 @@ import base64
 import urllib.request as _urlreq
 from datetime import datetime
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 import io
 
 # ── Force Playwright browser path — must be set before playwright imports ──
@@ -124,6 +124,44 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("twitter-fetcher")
+
+
+def _launch_chromium(pw, minimal=False):
+    """Launch Chromium with platform-safe defaults and a minimal fallback mode."""
+    if minimal:
+        return pw.chromium.launch(headless=True)
+
+    if os.name == "nt":
+        # X can crash Chromium with over-aggressive flags on Windows.
+        return pw.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-extensions",
+                "--no-first-run",
+                "--disable-background-networking",
+                "--disable-default-apps",
+            ],
+        )
+
+    return pw.chromium.launch(
+        headless=True,
+        args=[
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--disable-blink-features=AutomationControlled",
+            "--memory-pressure-off",
+            "--js-flags=--max-old-space-size=256",
+            "--disable-extensions",
+            "--disable-component-update",
+            "--no-first-run",
+            "--disable-background-networking",
+            "--disable-default-apps",
+            "--disable-sync",
+        ],
+    )
 
 
 def _local_file_url(path):
@@ -418,6 +456,99 @@ def _extract_post_images(node):
     return images
 
 
+def _wrap_text(draw, text, font, max_width):
+    lines = []
+    for paragraph in (text or "").splitlines() or [""]:
+        if not paragraph.strip():
+            lines.append("")
+            continue
+        words = paragraph.split()
+        current = words[:1]
+        for word in words[1:]:
+            test_line = " ".join(current + [word])
+            if draw.textlength(test_line, font=font) <= max_width:
+                current.append(word)
+            else:
+                lines.append(" ".join(current))
+                current = [word]
+        lines.append(" ".join(current))
+    return lines
+
+
+def _pick_font(size, bold=False):
+    candidates = [
+        r"C:\\Windows\\Fonts\\segoeuib.ttf" if bold else r"C:\\Windows\\Fonts\\segoeui.ttf",
+        r"C:\\Windows\\Fonts\\arialbd.ttf" if bold else r"C:\\Windows\\Fonts\\arial.ttf",
+    ]
+    for font_path in candidates:
+        try:
+            if os.path.exists(font_path):
+                return ImageFont.truetype(font_path, size=size)
+        except Exception:
+            pass
+    return ImageFont.load_default()
+
+
+def _render_post_card(output_path, cand):
+    """Render a clean fallback card when a browser screenshot is blank."""
+    width, height = 1200, 675
+    bg = Image.new("RGB", (width, height), "#F7FAFC")
+    draw = ImageDraw.Draw(bg)
+
+    title_font = _pick_font(34, bold=True)
+    meta_font = _pick_font(20, bold=False)
+    body_font = _pick_font(28, bold=False)
+    small_font = _pick_font(18, bold=False)
+
+    draw.rounded_rectangle((28, 28, width - 28, height - 28), radius=36, fill="white", outline="#D7E3F0", width=3)
+    draw.rounded_rectangle((56, 56, 168, 114), radius=18, fill="#1DA1F2")
+    draw.text((88, 70), "X POST", font=meta_font, fill="white")
+
+    title = "@Arattai"
+    date_text = cand.get("date", "")
+    draw.text((56, 146), title, font=title_font, fill="#0F172A")
+    if date_text:
+        draw.text((56, 196), date_text, font=meta_font, fill="#64748B")
+
+    body_text = (cand.get("body") or "").strip() or "No post text available."
+    body_max_width = width - 112
+    body_lines = _wrap_text(draw, body_text, body_font, body_max_width)
+    body_lines = body_lines[:7]
+    y = 260
+    line_height = 36
+    for line in body_lines:
+        draw.text((56, y), line, font=body_font, fill="#111827")
+        y += line_height if line else 22
+
+    stats = cand.get("stats") or {}
+    stat_text = "  •  ".join(
+        part for part in [
+            f"Replies {stats.get('replies', '0')}",
+            f"Reposts {stats.get('reposts', '0')}",
+            f"Likes {stats.get('likes', '0')}",
+            f"Views {stats.get('views', '0')}",
+        ] if part
+    )
+    if stat_text:
+        draw.text((56, height - 118), stat_text, font=small_font, fill="#475569")
+
+    url_text = cand.get("url", "")
+    if url_text:
+        draw.text((56, height - 84), url_text, font=small_font, fill="#94A3B8")
+
+    bg.save(output_path, format="PNG", optimize=True)
+
+
+def _is_blank_white_image(path):
+    try:
+        with Image.open(path) as img:
+            rgb = img.convert("RGB")
+            bbox = ImageChops.difference(rgb, Image.new("RGB", rgb.size, "white")).getbbox()
+            return bbox is None
+    except Exception:
+        return False
+
+
 def _download_image(url, dest_path, cookies=None):
     """Download a single image URL to dest_path and compress it immediately."""
     try:
@@ -552,6 +683,7 @@ def _collect_live_search_posts(page, seen_links, limit):
     """Collect recent posts from X search as fallback when profile posts are stale."""
     posts = []
     search_queries = [
+        "from:Arattai -is:reply",
         "from:Arattai",
         "Arattai -is:retweet",
         "Arattai has:images",
@@ -590,6 +722,11 @@ def _collect_live_search_posts(page, seen_links, limit):
                         body = body_el.inner_text().strip() if body_el else ""
                         if not body:
                             continue
+
+                        node_text = (node.inner_text() or "").lower()
+                        if "replying to" in node_text or body.lstrip().startswith("@"):
+                            continue
+
                         seen_links.add(tweet_url)
                         posts.append({
                             "node": node,
@@ -598,6 +735,7 @@ def _collect_live_search_posts(page, seen_links, limit):
                             "body": body,
                             "stats": _parse_stats(node),
                             "datetime": (time_el.get_attribute("datetime") or ""),
+                            "from_search": True,
                         })
                         log.info(f"Found: {tweet_url} ({date_str})")
                     except Exception:
@@ -710,25 +848,7 @@ def fetch_twitter_data():
         else:
             log.warning("No session file found — will attempt fresh login")
 
-        browser = pw.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-blink-features=AutomationControlled",
-                "--memory-pressure-off",
-                "--js-flags=--max-old-space-size=256",
-                "--single-process",
-                "--disable-extensions",
-                "--disable-component-update",
-                "--no-first-run",
-                "--disable-background-networking",
-                "--disable-default-apps",
-                "--disable-sync",
-            ],
-        )
+        browser = _launch_chromium(pw, minimal=False)
         context = browser.new_context(
             viewport={"width": 1024, "height": 768},
             user_agent=(
@@ -746,7 +866,37 @@ def fetch_twitter_data():
 
         page = context.new_page()
         log.info(f"Navigating to {X_PROFILE} to check session ...")
-        page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=40000)
+        try:
+            page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=40000)
+        except Exception as nav_err:
+            err_text = str(nav_err)
+            if "Target page, context or browser has been closed" not in err_text:
+                raise
+
+            log.warning("Primary Chromium launch crashed while opening X. Retrying with minimal browser config...")
+            try:
+                browser.close()
+            except Exception:
+                pass
+
+            browser = _launch_chromium(pw, minimal=True)
+            context = browser.new_context(
+                viewport={"width": 1024, "height": 768},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                locale="en-US",
+                timezone_id="Asia/Kolkata",
+                **session_kwargs,
+            )
+            context.add_init_script(
+                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+            )
+            page = context.new_page()
+            page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=40000)
+
         time.sleep(5)
 
         if _is_logged_in(page):
@@ -788,12 +938,16 @@ def fetch_twitter_data():
         except Exception:
             pass
 
+        selected_preloaded = None
         try:
-            page.wait_for_selector('[data-testid="tweet"]', timeout=20000)
+            page.wait_for_selector('[data-testid="tweet"], article', timeout=20000)
         except Exception:
-            log.error("No tweets found on profile page.")
-            browser.close()
-            return _empty_twitter()
+            log.warning("No tweets found on profile page. Trying live search fallback...")
+            selected_preloaded = _collect_live_search_posts(page, set(), 5)
+            if not selected_preloaded:
+                log.error("No tweets found on profile page or live search fallback.")
+                browser.close()
+                return _empty_twitter()
 
         page.mouse.wheel(0, 600)
         time.sleep(2)
@@ -850,6 +1004,10 @@ def fetch_twitter_data():
                             continue
                         body = "[Image Post]"
 
+                    node_text = (node.inner_text() or "").lower()
+                    if "replying to" in node_text or body.lstrip().startswith("@"):
+                        continue
+
                     stats = _parse_stats(node)
 
                     candidate = {
@@ -877,13 +1035,18 @@ def fetch_twitter_data():
             page.mouse.wheel(0, 1600)
             time.sleep(2)
 
-        originals = sorted(originals, key=lambda x: (x.get("is_pinned", False), x.get("datetime", "")), reverse=True)
-        reposts = sorted(reposts, key=lambda x: (x.get("is_pinned", False), x.get("datetime", "")), reverse=True)
+        if selected_preloaded is not None:
+            selected = selected_preloaded
+            originals = []
+            reposts = []
+        else:
+            originals = sorted(originals, key=lambda x: (x.get("is_pinned", False), x.get("datetime", "")), reverse=True)
+            reposts = sorted(reposts, key=lambda x: (x.get("is_pinned", False), x.get("datetime", "")), reverse=True)
 
-        selected = originals[:5]
-        if len(selected) < 5:
-            need = 5 - len(selected)
-            selected.extend(reposts[:need])
+            selected = originals[:5]
+            if len(selected) < 5:
+                need = 5 - len(selected)
+                selected.extend(reposts[:need])
 
         max_age = 14 if not _is_logged_in(page) else 45
         if selected and _is_stale_date(selected[0].get("date", ""), max_age_days=max_age):
@@ -896,8 +1059,19 @@ def fetch_twitter_data():
             if len(selected) < 5:
                 need = 5 - len(selected)
                 if backup_selected:
-                    log.info(f"Live search returned {len(selected)} posts, filling remaining {need} from timeline")
-                    selected.extend(backup_selected[:need])
+                    fresh_backup = [
+                        p for p in backup_selected
+                        if not _is_stale_date(p.get("date", ""), max_age_days=14)
+                    ]
+                    if fresh_backup:
+                        log.info(
+                            f"Live search returned {len(selected)} posts, filling remaining {need} from fresh timeline posts"
+                        )
+                        selected.extend(fresh_backup[:need])
+                    else:
+                        log.warning(
+                            "Live search returned no fresh posts; skipping stale timeline fallback so the feed does not get stuck on old posts."
+                        )
                 else:
                     log.warning("No posts available from timeline or live search!")
 
@@ -911,11 +1085,13 @@ def fetch_twitter_data():
             try:
                 node = cand.get("node")
                 captured = False
-                if node:
+                prefer_detail_capture = bool(cand.get("from_search"))
+
+                if node and not prefer_detail_capture:
                     try:
                         node.scroll_into_view_if_needed(timeout=5000)
                         time.sleep(1)
-                        node.screenshot(path=shot_path, type="jpeg", quality=70)
+                        node.screenshot(path=shot_path, type="png")
                         captured = os.path.exists(shot_path)
                     except Exception as e:
                         log.warning(f"Timeline node screenshot failed for post {count}: {e}")
@@ -924,10 +1100,23 @@ def fetch_twitter_data():
                     try:
                         page.goto(cand["url"], wait_until="commit", timeout=30000)
                         page.wait_for_selector('[data-testid="tweet"]', timeout=10000)
-                        page.screenshot(path=shot_path, type="jpeg", quality=70, full_page=False)
+                        detail_tweet = page.query_selector('[data-testid="tweet"]')
+                        if detail_tweet:
+                            detail_tweet.screenshot(path=shot_path, type="png")
+                        else:
+                            page.screenshot(path=shot_path, type="png", full_page=False)
                         captured = os.path.exists(shot_path)
                     except Exception:
                         pass
+
+                if captured and _is_blank_white_image(shot_path):
+                    log.warning(f"Post {count} screenshot was blank; rendering a fallback post card.")
+                    _render_post_card(shot_path, cand)
+                    captured = os.path.exists(shot_path)
+
+                if not captured:
+                    _render_post_card(shot_path, cand)
+                    captured = os.path.exists(shot_path)
 
                 screenshot_paths.append(shot_path if os.path.exists(shot_path) else "")
             except Exception as e:
@@ -1199,16 +1388,9 @@ def run_twitter_cycle():
     new_inline   = twitter_data.get("inline_screenshots", {})
 
     if new_posts:
-        # ── INCREMENTAL MERGE ──────────────────────────────────────────────────
-        # Combine new_inline from the fresh scrape with prev_inline_shots so
-        # _merge_posts can carry forward old screenshot data for surviving posts.
-        combined_inline_prev = {**prev_inline_shots, **new_inline}
-        merged_posts, merged_inline = _merge_posts(
-            new_posts, prev_posts, combined_inline_prev, max_posts=5
-        )
-
-        twitter_data["recent_posts"]      = merged_posts
-        twitter_data["inline_screenshots"] = merged_inline
+        # Fresh scrape wins. Avoid carrying stale/reply items from cached history.
+        twitter_data["recent_posts"] = new_posts[:5]
+        twitter_data["inline_screenshots"] = new_inline
 
         # Preserve follower count if new scrape missed it
         if not twitter_data.get("followers") and prev_twitter.get("followers"):
@@ -1218,14 +1400,23 @@ def run_twitter_cycle():
 
     else:
         # ── ZERO POSTS RETURNED: keep old data entirely ────────────────────────
-        log.warning("Twitter scrape returned 0 posts; preserving previous X data.")
-        # For old /api/data/ screenshot URLs: they're still served from inline_screenshots
-        twitter_data["recent_posts"]      = prev_posts
-        twitter_data["inline_screenshots"] = prev_inline_shots
-        if not twitter_data.get("followers") and prev_twitter.get("followers"):
-            twitter_data["followers"]       = prev_twitter.get("followers", "")
-        if not twitter_data.get("followers_count") and prev_twitter.get("followers_count"):
-            twitter_data["followers_count"] = prev_twitter.get("followers_count", 0)
+        fresh_prev_posts = [
+            p for p in prev_posts
+            if not _is_stale_date(p.get("date", ""), max_age_days=14)
+        ]
+        if fresh_prev_posts:
+            log.warning("Twitter scrape returned 0 posts; preserving recent X data.")
+            # For old /api/data/ screenshot URLs: they're still served from inline_screenshots
+            twitter_data["recent_posts"]      = fresh_prev_posts
+            twitter_data["inline_screenshots"] = prev_inline_shots
+            if not twitter_data.get("followers") and prev_twitter.get("followers"):
+                twitter_data["followers"]       = prev_twitter.get("followers", "")
+            if not twitter_data.get("followers_count") and prev_twitter.get("followers_count"):
+                twitter_data["followers_count"] = prev_twitter.get("followers_count", 0)
+        else:
+            log.warning("Twitter scrape returned 0 posts and cached X data is stale; clearing X feed instead of reusing old posts.")
+            twitter_data["recent_posts"] = []
+            twitter_data["inline_screenshots"] = {}
 
     data["twitter"] = twitter_data
 

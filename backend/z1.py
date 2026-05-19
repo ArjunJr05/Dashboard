@@ -1,6 +1,8 @@
 import os, time, json, base64, re, requests, schedule, email.utils
 from datetime import datetime
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs
 # Optional imports handled within functions to prevent startup crashes in the cloud
 # from google_play_scraper import app, reviews, Sort
 
@@ -44,6 +46,77 @@ def _decode_google_news_cbm(url):
     return None
 
 
+def _extract_external_url_from_html(html_content, base_url=""):
+    """Best-effort extraction of a real external article URL from Google News HTML."""
+    if not html_content:
+        return ""
+
+    def _looks_like_article_url(candidate):
+        if not candidate or not candidate.startswith("http"):
+            return False
+        low = candidate.lower()
+        # Block list: Avoid Google internal services, tracking, and common asset domains.
+        if any(x in low for x in [
+            "google.com", 
+            "googleusercontent.com", 
+            "googleapis.com", 
+            "gstatic.com",
+            "googletagmanager.com",
+            "google-analytics.com",
+            "doubleclick.net",
+        ]):
+            return False
+
+        # Check for file extensions even if they have query parameters (e.g. /style.css?v=1)
+        parsed = urlparse(candidate)
+        path = parsed.path.lower()
+        if any(path.endswith(ext) or f"{ext}?" in low for ext in [
+            ".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg",
+            ".js", ".css", ".json", ".xml", ".ico", ".mp4", ".mp3",
+        ]):
+            return False
+
+        if not parsed.netloc or "." not in parsed.netloc:
+            return False
+        return True
+
+    soup = BeautifulSoup(html_content, "html.parser")
+
+    # Prefer canonical/meta URL fields first.
+    for tag in [
+        soup.find("meta", property="og:url"),
+        soup.find("meta", attrs={"name": "twitter:url"}),
+        soup.find("link", rel="canonical"),
+    ]:
+        if tag:
+            candidate = (tag.get("content") or tag.get("href") or "").strip()
+            if _looks_like_article_url(candidate):
+                return candidate
+
+    # Then scan anchors and unwrap common redirect parameters.
+    for anchor in soup.find_all("a", href=True):
+        href = anchor.get("href", "").strip()
+        if not href:
+            continue
+        if href.startswith("/url?") or href.startswith("https://www.google.com/url?"):
+            parsed = urlparse(href if href.startswith("http") else urljoin(base_url, href))
+            params = parse_qs(parsed.query)
+            for key in ("url", "q", "u"):
+                candidate = (params.get(key) or [""])[0].strip()
+                if _looks_like_article_url(candidate):
+                    return candidate
+        if _looks_like_article_url(href):
+            return href
+
+    # Last resort: regex scan for the first page-like URL.
+    matches = re.findall(r"https?://[^\s\"'<>]+", html_content)
+    for candidate in matches:
+        if _looks_like_article_url(candidate):
+            return candidate
+
+    return ""
+
+
 def capture_article_content(google_url):
     """Follow Google News redirects and return (final_url, html). 
     Handles CBM base64 encoded URLs, meta-refresh, and HTTP redirects."""
@@ -59,32 +132,20 @@ def capture_article_content(google_url):
         real_url = _decode_google_news_cbm(google_url)
         if real_url:
             r = requests.get(real_url, headers=headers, timeout=12, allow_redirects=True)
-            return r.url, r.text
-
-        # Step 2: Follow HTTP redirect
-        r = requests.get(google_url, headers=headers, timeout=12, allow_redirects=True)
-        final_url = r.url
-        html_content = r.text
+            # If the CBM decoded URL still redirects to Google (rare), we'll catch it below
+            final_url = r.url
+            html_content = r.text
+        else:
+            # Step 2: Follow HTTP redirect
+            r = requests.get(google_url, headers=headers, timeout=12, allow_redirects=True)
+            final_url = r.url
+            html_content = r.text
 
         # Step 3: Still stuck on Google? Parse the HTML for a real link
-        if "news.google.com" in final_url or "google.com" in final_url:
-            soup = BeautifulSoup(html_content, 'html.parser')
-            actual_link = None
-
-            # Check meta refresh
-            meta_refresh = soup.find("meta", attrs={"http-equiv": lambda x: x and x.lower() == 'refresh'})
-            if meta_refresh and "url=" in meta_refresh.get("content", "").lower():
-                parts = meta_refresh["content"].lower().split("url=", 1)
-                if len(parts) > 1:
-                    actual_link = parts[1].strip().strip('\'"')
-
-            # Look for an explicit external link
-            if not actual_link:
-                a_tag = soup.find("a", href=lambda h: h and h.startswith("http") and "google.com" not in h)
-                if a_tag:
-                    actual_link = a_tag["href"]
-
-            if actual_link and actual_link.startswith("http"):
+        # This is common with the newer Google News redirect pages.
+        if any(domain in final_url for domain in ["news.google.com", "google.com", "google.co.in"]):
+            actual_link = _extract_external_url_from_html(html_content, final_url)
+            if actual_link and actual_link != final_url:
                 r2 = requests.get(actual_link, headers=headers, timeout=12, allow_redirects=True)
                 final_url = r2.url
                 html_content = r2.text
@@ -179,14 +240,78 @@ def get_summary(link, title, fallback):
         if len(summary) > 400:
             summary = summary[:397] + "..."
 
-        if not image_url:
-            image_url = "https://www.arattai.in/assets/images/arattai-logo.png"
+        # Return empty string if no real image found (don't use placeholder here)
+        # The caller (fetch_google_news) will handle the fallback
 
         return summary, f_url, image_url
 
     except Exception as e:
         print(f"[get_summary] Error parsing {f_url}: {e}")
-        return fallback, f_url, "https://www.arattai.in/assets/images/arattai-logo.png"
+        return fallback, f_url, ""  # Return empty string, not placeholder
+
+
+def _normalize_image_url(src, base_url):
+    src = (src or "").strip()
+    if not src or src.startswith("data:"):
+        return ""
+    if src.startswith("//"):
+        src = "https:" + src
+    elif src.startswith("/"):
+        src = urljoin(base_url, src)
+    return src
+
+
+def _extract_rss_item_image(item, base_url):
+    """Best-effort thumbnail extraction from a Google News RSS item."""
+    candidates = []
+
+    for tag_name in [
+        "{http://search.yahoo.com/mrss/}content",
+        "{http://search.yahoo.com/mrss/}thumbnail",
+        "enclosure",
+    ]:
+        for tag in item.findall(tag_name):
+            src = tag.get("url") or tag.get("href") or tag.get("src") or ""
+            src = _normalize_image_url(src, base_url)
+            if src:
+                candidates.append(src)
+
+    desc = item.findtext("description", default="") or ""
+    if desc:
+        soup = BeautifulSoup(desc, "html.parser")
+        img = soup.find("img")
+        if img:
+            src = _normalize_image_url(img.get("src") or img.get("data-src") or "", base_url)
+            if src:
+                candidates.append(src)
+
+    for src in candidates:
+        low = src.lower()
+        if any(bad in low for bad in ["google.com/ads", "doubleclick", "gstatic.com", "lh3.googleusercontent.com"]):
+            continue
+        if low.endswith(".gif"):
+            continue
+        return src
+    return ""
+
+
+def _news_preview_image(url):
+    """Create a thumbnail-style preview for an article URL using thum.io."""
+    if not url:
+        return ""
+    # Generate preview for any URL, including Google News redirects
+    # thum.io will follow redirects and capture the final page
+    return f"https://image.thum.io/get/width/1200/crop/700/noanimate/{url}"
+
+
+def _is_placeholder_image(url):
+    if not url:
+        return True
+    low = url.lower()
+    return any(token in low for token in [
+        "arattai-logo.png",
+        "arattai-news-placeholder.png",
+    ])
 
 # ── FETCHERS ──────────────────────────────────────────────
 def fetch_appstore():
@@ -359,9 +484,27 @@ def fetch_google_news():
                 
                 if t.endswith(f" - {src}"): t = t[:-(len(src) + 3)]
                 summary, actual_url, image = get_summary(link, t, "Catch the latest updates on Arattai, India's own secure messaging platform.")
+                rss_image = _extract_rss_item_image(item, actual_url or link)
+
+                # Image selection: prefer real metadata, fallback to RSS, then thum.io preview
+                image_to_use = ""
                 
-                # If no image found, use the Arattai placeholder instead of dropping
-                image_to_use = image if image else PLACEHOLDER
+                # 1. Try article og:image / twitter:image meta tags
+                if image and not _is_placeholder_image(image):
+                    image_to_use = image
+                
+                # 2. Try RSS item metadata  
+                if not image_to_use and rss_image:
+                    image_to_use = rss_image
+                
+                # 3. Use thum.io screenshot preview of the article URL
+                # This works even if URL unwrapping failed and we still have Google News URL
+                if not image_to_use:
+                    image_to_use = _news_preview_image(actual_url or link)
+                
+                # 4. Final fallback: placeholder
+                if not image_to_use:
+                    image_to_use = "https://www.arattai.in/assets/images/arattai-logo.png"
                 
                 # Format Date: Try to convert RSS date to YYYY-MM-DD
                 display_date = pub
@@ -401,10 +544,11 @@ def fetch_google_news():
                 t = item.find('title').text; link = item.find('link').text
                 if not any(p['title'] == t for p in posts):
                     summary, actual_url, image = get_summary(link, t, "Latest news about Arattai.")
+                    rss_image = _extract_rss_item_image(item, actual_url or link)
                     posts.append({
                         "title": t, "url": link, "resolved_url": actual_url, 
                         "date": now().split(' ')[0], "source": "Web Search", 
-                        "body": summary, "image": image if image else PLACEHOLDER
+                        "body": summary, "image": image if image and not _is_placeholder_image(image) else (rss_image or _news_preview_image(actual_url or link) or "")
                     })
         except: pass
 

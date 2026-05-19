@@ -107,7 +107,6 @@ if X_SESSION_DATA:
         print(f"[err] [Secure] Failed to restore X session: {e}")
 
 app = Flask(__name__, static_folder="public", static_url_path="")
-CORS(app)
 app.register_blueprint(analysis_bp)
 
 # ── Logging ──────────────────────────────────────────────
@@ -144,6 +143,126 @@ def _load_data_json():
 
 
 # ── Routes ────────────────────────────────────────────────
+
+# ── OG Meta / Link Preview endpoint (WhatsApp-style thumbnail) ─────────────
+@app.route("/api/og")
+def og_meta():
+    """
+    Fetches OG/Twitter meta tags from a given URL and returns:
+      { image, title, description, url }
+    Used by the News slide to display article thumbnails like WhatsApp link previews.
+    """
+    url = request.args.get("url", "").strip()
+    if not url or not url.startswith("http"):
+        return jsonify({"error": "Missing or invalid url param"}), 400
+
+    # Resolve Google News URLs to real article URLs
+    if "news.google.com" in url or "google.com/articles" in url:
+        url = resolve_google_news_url(url)
+
+    # Return cached result if we have it in data.json
+    try:
+        data_path = _load_data_json()
+        if data_path:
+            with open(data_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            og_cache = data.get("_og_cache", {})
+            if url in og_cache:
+                return jsonify(og_cache[url])
+    except Exception:
+        pass
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+    }
+
+    result = {"image": "", "title": "", "description": "", "url": url}
+    try:
+        r = req_lib.get(url, headers=headers, timeout=10, allow_redirects=True)
+        final_url = r.url
+        result["url"] = final_url
+
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        def _meta(prop=None, name=None, itemprop=None):
+            tag = None
+            if prop:     tag = soup.find("meta", property=prop)
+            if not tag and name: tag = soup.find("meta", attrs={"name": name})
+            if not tag and itemprop: tag = soup.find("meta", itemprop=itemprop)
+            return (tag.get("content") or "").strip() if tag else ""
+
+        # Image: prefer og:image, then twitter:image, then first content img
+        img = (_meta(prop="og:image") or
+               _meta(name="twitter:image") or
+               _meta(name="twitter:image:src") or
+               _meta(itemprop="image"))
+
+        # Resolve relative images
+        if img and img.startswith("//"):
+            img = "https:" + img
+        elif img and img.startswith("/"):
+            from urllib.parse import urlparse as _up
+            p = _up(final_url)
+            img = f"{p.scheme}://{p.netloc}{img}"
+
+        # Fallback: first large img in article body
+        if not img:
+            root = soup.find("article") or soup.find("main") or soup.body
+            if root:
+                for tag in root.find_all("img"):
+                    src = (tag.get("src") or tag.get("data-src") or "").strip()
+                    if not src or src.startswith("data:") or "logo" in src.lower() or "icon" in src.lower():
+                        continue
+                    if src.startswith("//"): src = "https:" + src
+                    elif src.startswith("/"):
+                        from urllib.parse import urlparse as _up
+                        p = _up(final_url)
+                        src = f"{p.scheme}://{p.netloc}{src}"
+                    try:
+                        w = int(tag.get("width", 999))
+                        h = int(tag.get("height", 999))
+                        if w < 200 or h < 100:
+                            continue
+                    except Exception:
+                        pass
+                    img = src
+                    break
+
+        result["image"] = img
+        result["title"] = (_meta(prop="og:title") or
+                           _meta(name="twitter:title") or
+                           (soup.title.string.strip() if soup.title else ""))
+        result["description"] = (_meta(prop="og:description") or
+                                  _meta(name="description") or
+                                  _meta(name="twitter:description"))
+
+        # Persist to cache inside data.json
+        try:
+            data_path = _load_data_json()
+            if data_path:
+                with open(data_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                og_cache = data.get("_og_cache", {})
+                og_cache[url] = result
+                # Keep cache bounded
+                if len(og_cache) > 100:
+                    oldest_keys = list(og_cache.keys())[:len(og_cache) - 100]
+                    for k in oldest_keys:
+                        del og_cache[k]
+                data["_og_cache"] = og_cache
+                with open(data_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+    except Exception as e:
+        log.warning(f"[og] Failed to fetch {url}: {e}")
+
+    return jsonify(result)
+
 
 @app.route("/logs")
 @app.route("/api/logs")
@@ -367,11 +486,9 @@ def trigger_fetch():
     thread.start()
     return jsonify({"status": "fetch started", "time": now()})
 
-
 # ── Global thread lock for Twitter to prevent duplicates ─
 _TWITTER_BUSY = False
 _TWITTER_LOCK = threading.Lock()
-
 
 @app.route("/x-session/status")
 def x_session_status():
@@ -384,7 +501,6 @@ def x_session_status():
         "message": "Session found ✓" if is_valid else "No valid session — please log in",
         "login_url": "/x-session/login",
     })
-
 
 @app.route("/x-session/login")
 def x_session_login():
