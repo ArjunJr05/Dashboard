@@ -479,6 +479,16 @@ def health():
     return jsonify({"status": "ok", "time": now()})
 
 
+@app.route("/version")
+def version():
+    """Return deployed code version."""
+    try:
+        from z1 import __version__ as z1_version
+        return jsonify({"z1_version": z1_version, "time": now()})
+    except:
+        return jsonify({"z1_version": "unknown", "time": now()})
+
+
 @app.route("/trigger-fetch")
 def trigger_fetch():
     """Manual trigger — force a full data refresh."""
