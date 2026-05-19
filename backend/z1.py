@@ -492,33 +492,28 @@ def fetch_google_news():
 
                 # Image selection: prefer real metadata, fallback to RSS, then thum.io preview
                 image_to_use = ""
-                debug_log = []
                 
                 # 1. Try article og:image / twitter:image meta tags
                 if image and not _is_placeholder_image(image):
                     image_to_use = image
-                    debug_log.append(f"article_meta:{image[:60]}")
-                else:
-                    debug_log.append(f"no_article_meta:img={repr(image)}")
                 
                 # 2. Try RSS item metadata  
                 if not image_to_use and rss_image:
                     image_to_use = rss_image
-                    debug_log.append(f"rss_image:{rss_image[:60]}")
                 
                 # 3. Use thum.io screenshot preview of the article URL
-                # This works even if URL unwrapping failed and we still have Google News URL
                 if not image_to_use:
                     thumb = _news_preview_image(actual_url or link)
-                    debug_log.append(f"thum_result:{repr(thumb)}")
                     if thumb:
                         image_to_use = thumb
-                        debug_log.append(f"using_thum:{thumb[:60]}")
                 
                 # 4. Final fallback: placeholder
                 if not image_to_use:
                     image_to_use = "https://www.arattai.in/assets/images/arattai-logo.png"
-                    debug_log.append(f"using_placeholder")
+                
+                # Failsafe: ensure image is never empty
+                if not image_to_use:
+                    image_to_use = f"NODEBUG:{t[:20]}"
                 
                 # Format Date: Try to convert RSS date to YYYY-MM-DD
                 display_date = pub
