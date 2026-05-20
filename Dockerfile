@@ -1,24 +1,5 @@
 # ═══════════════════════════════════════════════════════════════
-# Stage 1 — Build Vue frontend
-# ═══════════════════════════════════════════════════════════════
-FROM node:20-alpine AS frontend-builder
-
-WORKDIR /app
-
-# Install Node dependencies
-COPY package.json package-lock.json* ./
-RUN npm install
-
-# Copy source and build
-COPY index.html ./
-COPY vite.config.js ./
-COPY src/ ./src/
-COPY public/ ./public/
-RUN npm run build
-
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 2 — Python backend + Playwright Chromium + built frontend
+# Python backend + Playwright Chromium
 # ═══════════════════════════════════════════════════════════════
 FROM python:3.11-slim
 
@@ -55,9 +36,6 @@ RUN playwright install chromium && \
 # ── Copy backend source ─────────────────────────────────────────
 COPY backend/ ./
 
-# ── Copy built Vue frontend into backend/public ─────────────────
-COPY --from=frontend-builder /app/dist/ ./public/
-
 # ── Environment variables ───────────────────────────────────────
 ENV PYTHONUNBUFFERED=1 \
     PLAYWRIGHT_BROWSERS_PATH=/app/pw-browsers \
@@ -68,5 +46,6 @@ ENV PYTHONUNBUFFERED=1 \
 EXPOSE 8080
 
 # ── Start ───────────────────────────────────────────────────────
-# Use shell form to allow environment variable expansion ($X_ZOHO_CATALYST_LISTEN_PORT)
-CMD gunicorn --bind 0.0.0.0:$X_ZOHO_CATALYST_LISTEN_PORT --workers 1 --threads 4 --timeout 0 server:app
+# X_ZOHO_CATALYST_LISTEN_PORT is injected by Zoho Catalyst at runtime.
+# Falls back to PORT, then 8080 for local testing.
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${X_ZOHO_CATALYST_LISTEN_PORT:-${PORT:-8080}} --workers 1 --threads 4 --timeout 0 server:app"]

@@ -5,7 +5,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.parse import parse_qs
 
 # Version marker for deployment verification
-__version__ = "v1.2.3-thum-fallback"
+__version__ = "v1.2.4-og-api-images"
 
 # Optional imports handled within functions to prevent startup crashes in the cloud
 # from google_play_scraper import app, reviews, Sort
@@ -65,9 +65,20 @@ def _extract_external_url_from_html(html_content, base_url=""):
             "googleusercontent.com", 
             "googleapis.com", 
             "gstatic.com",
+            "w3.org",
+            "/svg",
             "googletagmanager.com",
             "google-analytics.com",
             "doubleclick.net",
+            "angular.io",
+            "angular.dev",
+            "schema.org",
+            "wikipedia.org",
+            "mozilla.org",
+            "apple.com",
+            "openstreetmap.org",
+            "ietf.org",
+            "iana.org",
         ]):
             return False
 
@@ -121,22 +132,34 @@ def _extract_external_url_from_html(html_content, base_url=""):
     return ""
 
 
+_BAD_RESOLVED_DOMAINS = [
+    "news.google.com", "google.com", "google.co.in",
+    "w3.org", "schema.org", "iana.org", "ietf.org",
+]
+
+def _is_bad_resolved_url(url):
+    """Return True if the URL is not a real article page."""
+    if not url or not url.startswith("http"):
+        return True
+    low = url.lower()
+    return any(d in low for d in _BAD_RESOLVED_DOMAINS)
+
+
 def capture_article_content(google_url):
     """Follow Google News redirects and return (final_url, html). 
     Handles CBM base64 encoded URLs, meta-refresh, and HTTP redirects."""
     final_url = google_url
     html_content = ""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "WhatsApp/2.23.16.76 A",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
     }
     try:
         # Step 1: Try to decode CBM base64 directly (fastest path, no HTTP needed)
         real_url = _decode_google_news_cbm(google_url)
-        if real_url:
+        if real_url and not _is_bad_resolved_url(real_url):
             r = requests.get(real_url, headers=headers, timeout=12, allow_redirects=True)
-            # If the CBM decoded URL still redirects to Google (rare), we'll catch it below
             final_url = r.url
             html_content = r.text
         else:
@@ -145,14 +168,18 @@ def capture_article_content(google_url):
             final_url = r.url
             html_content = r.text
 
-        # Step 3: Still stuck on Google? Parse the HTML for a real link
-        # This is common with the newer Google News redirect pages.
-        if any(domain in final_url for domain in ["news.google.com", "google.com", "google.co.in"]):
+        # Step 3: Still stuck on Google or got a bad URL? Parse the HTML for a real link
+        if _is_bad_resolved_url(final_url):
             actual_link = _extract_external_url_from_html(html_content, final_url)
-            if actual_link and actual_link != final_url:
+            if actual_link and not _is_bad_resolved_url(actual_link):
                 r2 = requests.get(actual_link, headers=headers, timeout=12, allow_redirects=True)
                 final_url = r2.url
                 html_content = r2.text
+
+        # Step 4: If still bad, return the original google_url so the caller can use it
+        if _is_bad_resolved_url(final_url):
+            print(f"[capture] Could not resolve to real article URL from: {google_url[:80]}")
+            return google_url, html_content
 
     except Exception as e:
         print(f"Error capturing {google_url}: {e}")
@@ -303,6 +330,8 @@ def _news_preview_image(url):
     """Create a thumbnail-style preview for an article URL using thum.io."""
     if not url:
         return ""
+    if "dailyhunt" in url.lower() or "msn.com" in url.lower():
+        return ""
     # Generate preview for any URL, including Google News redirects
     # thum.io will follow redirects and capture the final page
     return f"https://image.thum.io/get/width/1200/crop/700/noanimate/{url}"
@@ -315,7 +344,138 @@ def _is_placeholder_image(url):
     return any(token in low for token in [
         "arattai-logo.png",
         "arattai-news-placeholder.png",
+        "googleusercontent.com",
+        "gstatic.com"
     ])
+
+def _fetch_og_image_from_api(article_url):
+    """Fetch a real article image from the local /api/og endpoint."""
+    if not article_url:
+        return ""
+
+    try:
+        api_url = f"http://127.0.0.1:8080/api/og?url={requests.utils.quote(article_url)}"
+        response = requests.get(api_url, timeout=8)
+        if response.ok:
+            image = (response.json().get("image") or "").strip()
+            if image and not _is_placeholder_image(image):
+                return image
+    except Exception:
+        pass
+    return ""
+
+
+def _ensure_valid_image_url(post):
+    """Post-process a news post to ensure it has a valid image URL."""
+    if not post.get("image") or _is_placeholder_image(post.get("image", "")):
+        # Try to extract a real image from the article
+        real_url = post.get("resolved_url") or post.get("url", "")
+        if real_url and real_url != "https://www.w3.org/2000/svg":
+            try:
+                # Decode Google News URL if needed
+                decoded = _decode_google_news_cbm(real_url)
+                if decoded:
+                    real_url = decoded
+                
+                # Fetch the article and extract image
+                headers = {
+                    "User-Agent": "WhatsApp/2.23.16.76 A",
+                }
+                r = requests.get(real_url, headers=headers, timeout=10, allow_redirects=True)
+                
+                # If still stuck on Google News interstitial, extract the actual link and fetch again
+                if "google.com" in r.url.lower():
+                    temp_soup = BeautifulSoup(r.text, 'html.parser')
+                    a_tag = temp_soup.find("a")
+                    if a_tag and a_tag.get("href", "").startswith("http"):
+                        real_url = a_tag["href"]
+                        r = requests.get(real_url, headers=headers, timeout=10, allow_redirects=True)
+                else:
+                    real_url = r.url
+
+                soup = BeautifulSoup(r.text, 'html.parser')
+                parsed = urlparse(r.url)
+                base_domain = f"{parsed.scheme}://{parsed.netloc}"
+                
+                # Try og:image first
+                for prop in ["og:image", "twitter:image"]:
+                    tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+                    if tag and tag.get("content", "").strip():
+                        img = tag["content"].strip()
+                        if img.startswith("//"):
+                            img = "https:" + img
+                        elif img.startswith("/"):
+                            img = base_domain + img
+                        if not any(bad in img.lower() for bad in ["google.com", "gstatic.com", "doubleclick", "googleusercontent"]):
+                            post["image"] = img
+                            post["resolved_url"] = r.url
+                            return True
+                
+                # Fallback to first large image in article body
+                root = soup.find("article") or soup.find("main") or soup.body
+                if root:
+                    for img_tag in root.find_all("img"):
+                        src = (img_tag.get("src") or img_tag.get("data-src") or "").strip()
+                        if not src or src.startswith("data:"):
+                            continue
+                        if src.startswith("//"):
+                            src = "https:" + src
+                        elif src.startswith("/"):
+                            src = base_domain + src
+                        if any(bad in src.lower() for bad in ["logo", "icon", "avatar", "google.com", "gstatic.com", "googleusercontent"]):
+                            continue
+                        post["image"] = src
+                        post["resolved_url"] = r.url
+                        return True
+            except Exception as e:
+                print(f"  [image-fix] Failed to extract image for {post.get('title', '')[:30]}: {e}")
+
+        # Fallback to Microlink API (WhatsApp-style metadata extraction service)
+        try:
+            print(f"  [image-fix] Attempting microlink API extraction for {real_url}")
+            ml_url = f"https://api.microlink.io/?url={requests.utils.quote(real_url)}"
+            r_ml = requests.get(ml_url, timeout=12)
+            if r_ml.ok:
+                ml_data = r_ml.json()
+                img = ml_data.get("data", {}).get("image", {}).get("url")
+                if img and not _is_placeholder_image(img) and "googleusercontent" not in img.lower() and "gstatic.com" not in img.lower():
+                    post["image"] = img
+                    post["resolved_url"] = real_url
+                    print(f"  [image-fix] Microlink successful: {img[:60]}...")
+                    return True
+        except Exception as e:
+            print(f"  [image-fix] Microlink failed: {e}")
+
+        # Fallback to Playwright screenshot
+        try:
+            print(f"  [image-fix] Falling back to screenshot for {real_url}")
+            from playwright.sync_api import sync_playwright
+            import re
+            safe_title = re.sub(r'[^a-zA-Z0-9]', '_', post.get("title", "article"))[:20]
+            filename = f"article_{safe_title}.png"
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            filepath = os.path.join(base_dir, filename)
+            if os.name != 'nt':
+                filepath = f"/tmp/{filename}"
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
+                page = browser.new_page(viewport={"width": 1200, "height": 800})
+                page.goto(real_url, wait_until="load", timeout=20000)
+                page.wait_for_timeout(4000) # Wait for JS redirects (like Google News) to complete
+                page.screenshot(path=filepath)
+                final_url = page.url
+                browser.close()
+            post["image"] = f"/api/data/{filename}"
+            post["resolved_url"] = final_url
+            print(f"  [image-fix] Successfully took screenshot -> {filename}")
+            return True
+        except Exception as se:
+            print(f"  [image-fix] Screenshot fallback failed: {se}")
+
+        # Final fallback
+        post["image"] = "https://www.arattai.in/assets/images/arattai-logo.png"
+        return False
+    return True
 
 # ── FETCHERS ──────────────────────────────────────────────
 def fetch_appstore():
@@ -420,6 +580,7 @@ def fetch_playstore():
 def fetch_google_news():
     print(f"[{now()}] Fetching Google News (Expanded Arattai Search)...")
     posts = []
+    MAX_NEWS_POSTS = 5
     
     # High-quality fallback if search fails
     PLACEHOLDER = "https://i.ibb.co/L5pZ0Xf/arattai-news-placeholder.png"
@@ -470,7 +631,8 @@ def fetch_google_news():
     
     try:
         for q in queries:
-            if len(posts) >= 5: break # Got enough fresh news
+            if len(posts) >= MAX_NEWS_POSTS:
+                break # Got enough fresh news
             
             rss_url = f"https://news.google.com/rss/search?q={requests.utils.quote(q)}&hl=en-IN&gl=IN&ceid=IN:en"
             r = requests.get(rss_url, headers=HEADERS, timeout=10)
@@ -479,7 +641,8 @@ def fetch_google_news():
             
             feed_items = root.findall('./channel/item')
             for item in feed_items:
-                if len(posts) >= 15: break 
+                if len(posts) >= MAX_NEWS_POSTS:
+                    break 
                 find_title = item.find('title'); find_link = item.find('link'); find_pub = item.find('pubDate'); find_src = item.find('source')
                 t = find_title.text if find_title is not None else ""; link = find_link.text if find_link is not None else ""; pub = find_pub.text if find_pub is not None else ""; src = find_src.text if find_src is not None else "News"
                 
@@ -500,14 +663,16 @@ def fetch_google_news():
                 # 2. Try RSS item metadata  
                 if not image_to_use and rss_image:
                     image_to_use = rss_image
+
+                # 3. Use the backend OG API to extract the real article image
+                if not image_to_use and actual_url:
+                    og_image = _fetch_og_image_from_api(actual_url)
+                    if og_image:
+                        image_to_use = og_image
                 
-                # 3. Use thum.io screenshot preview of the article URL
-                if not image_to_use:
-                    thumb = _news_preview_image(actual_url or link)
-                    if thumb:
-                        image_to_use = thumb
+                # Removed thum.io preview to let post-processing handle fallbacks
                 
-                # 4. Final fallback: placeholder
+                # 5. Final fallback: placeholder
                 if not image_to_use:
                     image_to_use = "https://www.arattai.in/assets/images/arattai-logo.png"
                 
@@ -557,7 +722,7 @@ def fetch_google_news():
                     posts.append({
                         "title": t, "url": link, "resolved_url": actual_url, 
                         "date": now().split(' ')[0], "source": "Web Search", 
-                        "body": summary, "image": image if image and not _is_placeholder_image(image) else (rss_image or _news_preview_image(actual_url or link) or "")
+                        "body": summary, "image": image if image and not _is_placeholder_image(image) else (rss_image or "")
                     })
         except: pass
 
@@ -574,6 +739,13 @@ def run_fetch_cycle():
         ast = fetch_appstore()
         pst = fetch_playstore()
         gns = fetch_google_news()
+        
+        # Post-process: ensure all news posts have valid image URLs
+        print(f"[{now()}] Post-processing news images...")
+        posts = gns.get("posts", [])
+        for i, post in enumerate(posts):
+            print(f"  [{i+1}/{len(posts)}] Checking image for: {post.get('title', '')[:40]}...")
+            _ensure_valid_image_url(post)
         
         # Merge instead of overwrite
         data = {}
@@ -652,7 +824,6 @@ if __name__ == "__main__":
                         f"{next_run.strftime('%H:%M:%S')} ({mins:02d}:{secs:02d} remaining)."
                     )
                 last_heartbeat_minute = minute_key
-            
             time.sleep(5)
     except KeyboardInterrupt:
         print(f"\n[{now()}] Scheduler stopped by user.")

@@ -846,7 +846,7 @@ def fetch_twitter_data():
             log.info(f"Found session file at: {_session_to_use}")
             session_kwargs["storage_state"] = _session_to_use
         else:
-            log.warning("No session file found — will attempt fresh login")
+            log.warning("No session file found — will skip login and use live search fallback")
 
         browser = _launch_chromium(pw, minimal=False)
         context = browser.new_context(
@@ -902,13 +902,16 @@ def fetch_twitter_data():
         if _is_logged_in(page):
             log.info("Session valid — skipping login ✓")
         else:
-            log.info("Session expired or missing — logging in fresh ...")
-            logged_in = _login(page)
-            if logged_in:
-                _save_session(context)
-            log.info(f"Navigating to {X_PROFILE} ...")
-            page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=40000)
-            time.sleep(5)
+            if _session_to_use:
+                log.info("Session expired or missing — logging in fresh ...")
+                logged_in = _login(page)
+                if logged_in:
+                    _save_session(context)
+                log.info(f"Navigating to {X_PROFILE} ...")
+                page.goto(X_PROFILE, wait_until="domcontentloaded", timeout=40000)
+                time.sleep(5)
+            else:
+                log.warning("No authenticated session available — proceeding with live search only.")
 
         followers_text, followers_count = _extract_followers(page)
         if followers_text:
@@ -939,15 +942,23 @@ def fetch_twitter_data():
             pass
 
         selected_preloaded = None
-        try:
-            page.wait_for_selector('[data-testid="tweet"], article', timeout=20000)
-        except Exception:
-            log.warning("No tweets found on profile page. Trying live search fallback...")
+        if not _session_to_use:
+            log.warning("Skipping profile timeline scrape because no authenticated session exists.")
             selected_preloaded = _collect_live_search_posts(page, set(), 5)
             if not selected_preloaded:
-                log.error("No tweets found on profile page or live search fallback.")
+                log.error("Live search fallback returned no posts.")
                 browser.close()
                 return _empty_twitter()
+        else:
+            try:
+                page.wait_for_selector('[data-testid="tweet"], article', timeout=20000)
+            except Exception:
+                log.warning("No tweets found on profile page. Trying live search fallback...")
+                selected_preloaded = _collect_live_search_posts(page, set(), 5)
+                if not selected_preloaded:
+                    log.error("No tweets found on profile page or live search fallback.")
+                    browser.close()
+                    return _empty_twitter()
 
         page.mouse.wheel(0, 600)
         time.sleep(2)

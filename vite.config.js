@@ -54,7 +54,7 @@ const NativeFrameProxy = () => ({
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/',
+  base: './',
   server: {
     watch: {
       ignored: ['**/backend/data.json', '**/public/data.json', '**/backend/**']

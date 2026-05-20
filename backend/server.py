@@ -160,6 +160,11 @@ def og_meta():
     if "news.google.com" in url or "google.com/articles" in url:
         url = resolve_google_news_url(url)
 
+    # If still a bad/google URL after resolution, return empty rather than fetching Google logo
+    _bad_domains = ["news.google.com", "google.com", "w3.org", "schema.org"]
+    if any(d in url for d in _bad_domains):
+        return jsonify({"image": "", "title": "", "description": "", "url": url})
+
     # Return cached result if we have it in data.json
     try:
         data_path = _load_data_json()
@@ -596,16 +601,6 @@ def x_session_login():
 @app.route("/trigger-twitter")
 def trigger_twitter():
     """Manual trigger — force a Twitter screenshot refresh immediately."""
-    from twitter_fetcher import _validate_session_file
-
-    if not _validate_session_file():
-        return jsonify({
-            "status": "no_valid_session",
-            "message": "No authenticated X session found. Visit /x-session/login to log in and save session",
-            "login_url": "/x-session/login",
-            "session_check_url": "/x-session/status",
-        }), 401
-
     global _TWITTER_BUSY
     if not _TWITTER_AVAIL:
         return jsonify({"status": "error", "message": "twitter_fetcher not available"}), 503

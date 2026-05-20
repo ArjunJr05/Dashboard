@@ -153,7 +153,6 @@
                       <div class="ov-plat-sub">iOS</div>
                     </div>
                   </div>
-                  <div class="ov-card-badge ov-badge-ios">WIDS</div>
                 </div>
 
                 <div class="ov-rating-block">
@@ -174,21 +173,21 @@
                       </defs>
                     </svg>
                     <div class="ov-ring-center">
-                      <div class="ov-ring-score">{{ ios.rating || '4.7' }}</div>
+                      <div class="ov-ring-score">{{ ios.rating }}</div>
                       <div class="ov-ring-label">/ 5.0</div>
                     </div>
                   </div>
                   <div class="ov-rating-meta">
                     <div class="ov-rating-stars">
-                      <span v-for="i in 5" :key="i" class="ov-star" :class="getStarClass(ios.rating||4.7, i)"></span>
+                      <span v-for="i in 5" :key="i" class="ov-star" :class="getStarClass(ios.rating, i)"></span>
                     </div>
-                    <div class="ov-rating-count">{{ ios.rating_count ? fmtCompact(ios.rating_count) : '19.4k' }}</div>
+                    <div class="ov-rating-count">{{ fmtCompact(ios.rating_count) }}</div>
                     <div class="ov-rating-unit">Happy Users</div>
                   </div>
                 </div>
 
                 <div class="ov-card-footer-bar">
-                  <div class="ov-footer-fill" :style="{width: ((ios.rating||4.7)/5 * 100) + '%'}"></div>
+                  <div class="ov-footer-fill" :style="{width: ((ios.rating)/5 * 100) + '%'}"></div>
                 </div>
               </div>
 
@@ -203,7 +202,6 @@
                       <div class="ov-plat-sub">Android</div>
                     </div>
                   </div>
-                  <div class="ov-card-badge ov-badge-and">PLAY SENTO</div>
                 </div>
 
                 <div class="ov-rating-block">
@@ -212,7 +210,7 @@
                       <circle cx="50" cy="50" r="40" stroke="rgba(247,215,71,0.15)" stroke-width="9" fill="none"/>
                       <circle cx="50" cy="50" r="40" stroke="url(#ringGradient2)" stroke-width="9" fill="none"
                         stroke-dasharray="251"
-                        :stroke-dashoffset="251 - (251 * ((android.rating||4.6)/5))"
+                        :stroke-dashoffset="251 - (251 * ((android.rating)/5))"
                         stroke-linecap="round"
                         transform="rotate(-90 50 50)"
                         style="transition:stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1)"/>
@@ -224,21 +222,21 @@
                       </defs>
                     </svg>
                     <div class="ov-ring-center">
-                      <div class="ov-ring-score">{{ android.rating || '4.6' }}</div>
+                      <div class="ov-ring-score">{{ android.rating }}</div>
                       <div class="ov-ring-label">/ 5.0</div>
                     </div>
                   </div>
                   <div class="ov-rating-meta">
                     <div class="ov-rating-stars">
-                      <span v-for="i in 5" :key="i" class="ov-star" :class="getStarClass(android.rating||4.6, i)"></span>
+                      <span v-for="i in 5" :key="i" class="ov-star" :class="getStarClass(android.rating, i)"></span>
                     </div>
-                    <div class="ov-rating-count">{{ android.rating_count ? fmtCompact(android.rating_count) : '229k' }}</div>
+                    <div class="ov-rating-count">{{ fmtCompact(android.rating_count) }}</div>
                     <div class="ov-rating-unit">Android Voices</div>
                   </div>
                 </div>
 
                 <div class="ov-card-footer-bar">
-                  <div class="ov-footer-fill" :style="{width: ((android.rating||4.6)/5 * 100) + '%'}"></div>
+                  <div class="ov-footer-fill" :style="{width: ((android.rating)/5 * 100) + '%'}"></div>
                 </div>
               </div>
 
@@ -448,22 +446,26 @@
           <div class="news-frame">
             <transition :name="newsTransDir" mode="out-in">
               <div v-if="currentNews" :key="newsIndex" class="ns-poster">
-                <div v-if="currentNews.image" class="ns-hero">
-                  <img :src="currentNews.image" class="ns-hero-img" alt="" @error="currentNews.image = ''" />
-                  <div class="ns-hero-overlay"></div>
-                </div>
-                <div v-else class="ns-no-image"></div>
                 <div class="ns-source-badge ns-source-banner">
                   <span class="ns-source">{{ currentNews.source }}</span>
                   <span class="ns-date">{{ currentNews.date }}</span>
                 </div>
-                <div class="ns-content">
-                  <div class="ns-top">
-                    <h1 class="ns-title">{{ currentNews.title }}</h1>
+                <div class="ns-poster-body">
+                  <div v-if="resolvedNewsImage" class="ns-hero">
+                    <img :src="resolvedNewsImage" class="ns-hero-img" alt="" @error="onNewsImageError" />
+                    <div class="ns-hero-overlay"></div>
                   </div>
-                  <div class="ns-footer">
-                    <div class="ns-pagination">
-                      <span v-for="(p,pi) in (gnews.posts||[])" :key="pi" class="ns-dot" :class="pi===newsIndex ? 'ns-dot-on' : ''"></span>
+                  <div v-else class="ns-no-image ns-no-image-loading">
+                    <div class="ns-img-skeleton"></div>
+                  </div>
+                  <div class="ns-content">
+                    <div class="ns-top">
+                      <h1 class="ns-title">{{ currentNews.title }}</h1>
+                    </div>
+                    <div class="ns-footer">
+                      <div class="ns-pagination">
+                        <span v-for="(p,pi) in (gnews.posts||[])" :key="pi" class="ns-dot" :class="pi===newsIndex ? 'ns-dot-on' : ''"></span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -486,25 +488,29 @@
             </div>
             <transition name="xf-pop" mode="out-in">
               <div class="xf-left-shot" :key="'left-'+twitterIdx">
-                <img v-if="(twitter.recent_posts||[])[twitterIdx]?.screenshot_url && !xImageFallback"
-                  :src="apiUrl((twitter.recent_posts||[])[twitterIdx].screenshot_url)"
-                  class="xf-left-img" @error="xImageFallback=true" alt="tweet"/>
-                <div v-else>
-                  <!-- Fallback Live Preview if no screenshots/images -->
-                  <div class="xf-fallback-preview">
-                    <img :src="'https://image.thum.io/get/width/1200/noanimate/' + (twitter.recent_posts||[])[twitterIdx]?.url" 
-                         class="xf-fallback-img" alt="live preview" />
+                <div class="xf-left-text-block">
+                  <img v-if="(twitter.recent_posts||[])[twitterIdx]?.screenshot_url && !xImageFallback"
+                    :src="cacheBustUrl((twitter.recent_posts||[])[twitterIdx].screenshot_url)"
+                    class="xf-left-img" @error="xImageFallback=true" alt="tweet"/>
+                  <div v-else>
+                    <!-- Fallback Live Preview if no screenshots/images -->
+                    <div class="xf-fallback-preview">
+                      <img :src="'https://image.thum.io/get/width/1200/noanimate/' + (twitter.recent_posts||[])[twitterIdx]?.url" 
+                           class="xf-fallback-img" alt="live preview" />
+                    </div>
+
+                    <div v-if="((twitter.recent_posts||[])[twitterIdx]?.post_images||[]).length"
+                      class="xf-post-images">
+                      <img v-for="(imgUrl, imgIdx) in (twitter.recent_posts||[])[twitterIdx].post_images"
+                        :key="'postimg-'+twitterIdx+'-'+imgIdx"
+                        :src="cacheBustUrl(imgUrl)"
+                        class="xf-post-img"
+                        alt="post image"
+                        @error="$event.target.style.display='none'" />
+                    </div>
                   </div>
 
-                  <div v-if="((twitter.recent_posts||[])[twitterIdx]?.post_images||[]).length"
-                    class="xf-post-images">
-                    <img v-for="(imgUrl, imgIdx) in (twitter.recent_posts||[])[twitterIdx].post_images"
-                      :key="'postimg-'+twitterIdx+'-'+imgIdx"
-                      :src="apiUrl(imgUrl)"
-                      class="xf-post-img"
-                      alt="post image"
-                      @error="$event.target.style.display='none'" />
-                  </div>
+                  <!-- Text block removed because Playwright screenshots already contain the tweet text -->
                 </div>
               </div>
             </transition>
@@ -588,6 +594,7 @@ const appReady    = ref(false)
 const loadError   = ref(false)
 const isFetching  = ref(false)
 const lastUpdated = ref('--:--')
+const dataRefreshStamp = ref(Date.now())
 const data        = ref({})
 const clock       = ref('')
 const cur         = ref(0)
@@ -686,12 +693,8 @@ const getDuration = () => {
   if (cur.value === 4) {
     const posts = twitter.value.recent_posts || []
     if (!posts.length) return 15000
-    const totalTime = posts.reduce((sum, p) => {
-      const comments = (p.comments || []).slice(0, 5)
-      if (!comments.length) return sum + 9000
-      return sum + comments.reduce((cSum, c) => cSum + ((c.timing || 3.5) * 1000), 0)
-    }, 0)
-    return Math.max(15000, totalTime)
+    // Each post is shown for exactly 12000ms by scheduleNextTwitter
+    return Math.max(15000, posts.length * 12000)
   }
   return 10000
 }
@@ -809,6 +812,60 @@ function triggerXPhase(){xPhase.value='center';clearTimeout(xPhaseTimeout);xPhas
 const newsIndex = ref(0), newsTransDir = ref('slide-next')
 let newsLoopTimeout = null, slideTimer = null, progRaf = null, progStart = null, clockInt = null, dataInt = null
 
+// ── OG image cache: url → image string (WhatsApp-style link preview) ──
+const ogImages = ref({})
+const ogFetching = ref({})
+
+async function fetchOgImage(articleUrl) {
+  if (!articleUrl) return
+  // Already fetched or in flight?
+  if (ogImages.value[articleUrl] !== undefined) return
+  if (ogFetching.value[articleUrl]) return
+  ogFetching.value[articleUrl] = true
+  try {
+    const r = await fetch(apiUrl(`/api/og?url=${encodeURIComponent(articleUrl)}`))
+    if (r.ok) {
+      const json = await r.json()
+      ogImages.value[articleUrl] = json.image || ''
+    } else {
+      ogImages.value[articleUrl] = ''
+    }
+  } catch {
+    ogImages.value[articleUrl] = ''
+  } finally {
+    ogFetching.value[articleUrl] = false
+  }
+}
+
+// Best image for current news card:
+// 1. OG image fetched live from the article (WhatsApp-style)
+// 2. Image already stored in data.json
+// 3. Empty (skeleton shown)
+const resolvedNewsImage = computed(() => {
+  const n = currentNews.value
+  if (!n) return ''
+  // Use the original Google News URL as key if resolved_url is bad (w3.org, google.com, etc.)
+  const resolved = n.resolved_url || ''
+  const isBadResolved = !resolved || resolved.includes('w3.org') || resolved.includes('google.com') || resolved.includes('schema.org')
+  const key = isBadResolved ? (n.url || '') : resolved
+  const ogImage = ogImages.value[key]
+  if (ogImage) return ogImage
+  // Fallback: use stored image only if it's a real article image (not Google logo)
+  const existing = n.image || ''
+  const BAD_IMAGE = ['fonts.googleapis', 'arattai-logo', 'lh3.googleusercontent', 'gstatic.com', 'google.com']
+  if (existing && !BAD_IMAGE.some(b => existing.includes(b))) return existing
+  return ''
+})
+
+function onNewsImageError() {
+  const n = currentNews.value
+  if (!n) return
+  const resolved = n.resolved_url || ''
+  const isBadResolved = !resolved || resolved.includes('w3.org') || resolved.includes('google.com')
+  const key = isBadResolved ? (n.url || '') : resolved
+  ogImages.value[key] = ''
+}
+
 function tick(){clock.value=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
 
 const ios     = computed(() => data.value.appstore    || {})
@@ -817,12 +874,19 @@ const gnews   = computed(() => data.value.google_news || {})
 const twitter = computed(() => data.value.twitter     || { recent_posts: [] })
 const allRevs = computed(() => [...(ios.value.reviews||[]),...(android.value.reviews||[])])
 const totalSignals = computed(() => allRevs.value.length + (gnews.value.posts?.length || 0) + (twitter.value.recent_posts?.length || 0))
-const API_BASE = import.meta.env.VITE_API_BASE || ''
+const API_BASE = 'https://api.codetabs.com/v1/proxy?quest=https://arattai-50041622599.development.catalystappsail.in'
 
 const apiUrl = (p) => {
   if (!p) return ''
   if (p.startsWith('http')) return p
-  return (p.startsWith('/') ? '' : '/') + p
+  return `${API_BASE}${p.startsWith('/') ? '' : '/'}${p}`
+}
+
+const cacheBustUrl = (p) => {
+  const url = apiUrl(p)
+  if (!url) return ''
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}v=${dataRefreshStamp.value}`
 }
 
 const xFollowersText = computed(() => {
@@ -946,11 +1010,23 @@ watch(cur,(n)=>{
   clearTimeout(iosRevTimeout);clearTimeout(andRevTimeout);clearTimeout(twitterLoopTimeout);clearTimeout(commentLoopTimeout);clearTimeout(newsLoopTimeout)
   if(n===1){let first=0;for(let i=0;i<sentimentOrder.length;i++){if((iosSentimentGroups.value[sentimentOrder[i].key]||[]).length>0){first=i;break}};iosSentimentIdx.value=first;iosRevIdxInGroup.value=0;triggerIosPhase();scheduleIosReview()}
   if(n===2){let first=0;for(let i=0;i<sentimentOrder.length;i++){if((andSentimentGroups.value[sentimentOrder[i].key]||[]).length>0){first=i;break}};andSentimentIdx.value=first;andRevIdxInGroup.value=0;triggerAndPhase();scheduleAndReview()}
-  if(n===3){newsIndex.value=0;scheduleNextNews()}
+  if(n===3){newsIndex.value=0;scheduleNextNews();prefetchNewsOgImages()}
   if(n===4){twitterIdx.value=0;xCommentIdx.value=0;triggerXPhase();scheduleNextTwitter()}
 })
 
 function scheduleNextNews(){clearTimeout(newsLoopTimeout);const posts=visibleNews.value;if(!posts.length)return;newsLoopTimeout=setTimeout(()=>{newsTransDir.value='slide-next';newsIndex.value=(newsIndex.value+1)%posts.length;scheduleNextNews()},9000)}
+
+// Prefetch OG images for all visible news posts
+function prefetchNewsOgImages() {
+  const posts = visibleNews.value
+  posts.forEach(p => {
+    // resolved_url may be a bad/google URL — prefer it only if it's a real article domain
+    const resolved = p.resolved_url || ''
+    const isBadResolved = !resolved || resolved.includes('w3.org') || resolved.includes('google.com') || resolved.includes('schema.org')
+    const url = isBadResolved ? (p.url || '') : resolved
+    if (url) fetchOgImage(url)
+  })
+}
 
 function scheduleNextTwitter(){
   clearTimeout(twitterLoopTimeout);clearTimeout(commentLoopTimeout)
@@ -985,7 +1061,7 @@ async function loadData(){
     if(!r||!r.ok){try{r=await fetch(apiUrl(`/data?t=${Date.now()}`))}catch(e){throw new Error('unreachable')}}
     if(!r.ok)throw new Error('HTTP '+r.status)
     const json=await r.json()
-    if(json){data.value=json;lastUpdated.value=new Date().toLocaleTimeString('en-IN',{hour12:false,hour:'2-digit',minute:'2-digit'});if(!appReady.value){appReady.value=true;scheduleAutoAdvance()}}
+    if(json){data.value=json;dataRefreshStamp.value=Date.now();lastUpdated.value=new Date().toLocaleTimeString('en-IN',{hour12:false,hour:'2-digit',minute:'2-digit'});if(!appReady.value){appReady.value=true;scheduleAutoAdvance()};prefetchNewsOgImages()}
   }catch(err){if(!appReady.value)setTimeout(()=>{if(!appReady.value)appReady.value=true},2000)}
   finally{isFetching.value=false}
 }
@@ -1686,8 +1762,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 .news-deco-dots span:nth-child(3n){animation-delay:1s;}
 @keyframes dot-breathe{from{opacity:.3;transform:scale(1);}to{opacity:.7;transform:scale(1.3);}}
 .news-frame{flex:1;height:84vh;background:var(--y-warm);border:2px solid rgba(200,160,0,.25);border-radius:3vh;position:relative;overflow:hidden;box-shadow:0 24px 60px rgba(160,120,0,.12);}
-.ns-poster{width:100%;height:100%;position:relative;display:flex;align-items:flex-end;overflow:hidden;}
+.ns-poster{width:100%;height:100%;position:relative;display:flex;flex-direction:column;overflow:hidden;}
 .ns-no-image{position:absolute;inset:0;background:linear-gradient(145deg,var(--y-soft),var(--y-main));}
+.ns-no-image-loading{background:#f5f1e8!important;}
+.ns-img-skeleton{
+  position:absolute;inset:0;
+  background:linear-gradient(110deg,#f0ead8 30%,#fdf7e8 50%,#f0ead8 70%);
+  background-size:200% 100%;
+  animation:skeleton-sweep 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-sweep{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
 .ns-hero{position:absolute;inset:0;z-index:0;}
 .xf-fallback-preview {
   margin-top: 1.5rem;
@@ -1709,16 +1793,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 }
 @keyframes kb{0%{transform:scale(1);}100%{transform:scale(1.15) translate(20px,10px);}}
 .ns-hero-overlay{position:absolute;inset:0;background:linear-gradient(0deg,rgba(255,252,225,.97) 10%,rgba(255,249,200,.55) 55%,transparent 100%);}
-.ns-content{position:relative;z-index:2;padding:calc(5vh + 92px) 5vh 5vh;width:100%;height:100%;display:flex;flex-direction:column;justify-content:flex-end;}
+.ns-poster-body{position:relative;flex:1;display:flex;align-items:flex-end;overflow:hidden;border-radius:0 0 calc(3vh - 2px) calc(3vh - 2px);}
+.ns-content{position:relative;z-index:2;padding:5vh;width:100%;height:100%;display:flex;flex-direction:column;justify-content:flex-end;}
 .ns-top{max-width:100%;margin-bottom:3vh;}
-.ns-source-badge{width:100%;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 24px;border-radius:calc(3vh - 2px) calc(3vh - 2px) 14px 14px;background:linear-gradient(180deg,#ff2a2a 0%,#e31313 100%);border-bottom:1.5px solid rgba(255,255,255,.35);border-left:0;border-right:0;border-top:0;margin-bottom:0;box-shadow:0 10px 24px rgba(170,20,20,.35);}
-.ns-source-banner{position:absolute;top:0;left:0;right:0;z-index:3;}
-.ns-source{font-family:var(--font-d);font-weight:900;color:#fff;font-size:clamp(26px,3.2vw,52px);letter-spacing:.03em;line-height:.95;text-transform:uppercase;}
-.ns-date{font-family:var(--font-b);font-size:12px;color:rgba(255,255,255,.95);background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:6px 10px;white-space:nowrap;}
+.ns-source-badge{width:100%;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 24px;border-radius:calc(3vh - 2px) calc(3vh - 2px) 0 0;background:var(--y-warm);border-bottom:1.5px solid rgba(200,160,0,.25);border-left:0;border-right:0;border-top:0;margin-bottom:0;box-shadow:none;}
+.ns-source-banner{position:relative;z-index:3;}
+.ns-source{font-family:var(--font-d);font-weight:900;color:var(--ink);font-size:clamp(26px,3.2vw,52px);letter-spacing:.03em;line-height:.95;text-transform:uppercase;}
+.ns-date{font-family:var(--font-b);font-size:12px;color:var(--ink);background:rgba(200,160,0,.15);border:1px solid rgba(200,160,0,.25);border-radius:999px;padding:6px 10px;white-space:nowrap;}
 .ns-title{font-family:var(--font-d);font-size:clamp(30px,5vh,64px);font-weight:800;color:var(--ink);line-height:1.08;margin-bottom:0;}
 .ns-footer{display:flex;align-items:center;justify-content:flex-end;}
 .ns-qr-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}
-.ns-qr{width:9vh;height:9vh;border:2.5px solid var(--y-deep);border-radius:10px;background:#fff;}
+.ns-qr{width:14vh;height:14vh;border:2.5px solid var(--y-deep);border-radius:10px;background:#fff;}
 .ns-qr-lbl{font-family:var(--font-d);font-size:11px;font-weight:800;color:var(--ink2);letter-spacing:.1em;text-align:center;}
 .ns-pagination{display:flex;gap:7px;}
 .ns-dot{width:7px;height:7px;border-radius:50%;background:rgba(0,0,0,.15);transition:all .3s;cursor:pointer;}
@@ -1732,8 +1817,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 
 /* BOTTOM BAR */
 .bottom-bar{position:relative;z-index:100;height:50px;display:flex;align-items:center;padding:0 2.4rem;gap:1rem;background:rgba(255,253,232,.94);border-top:1px solid rgba(0,0,0,.06);backdrop-filter:blur(15px);--ink3:rgba(26,20,0,.5);}
-.progress-rail{position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(200,160,0,.12);}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--y-deep),var(--y-main),var(--y-soft));box-shadow:0 0 8px rgba(200,160,0,.5);}
+.progress-rail{position:absolute;top:0;left:0;right:0;height:4px;background:rgba(200,160,0,.15);z-index:10;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--y-deep),#ff8f00);box-shadow:0 0 10px rgba(200,160,0,.6);transition:width 0.1s linear;}
 .bb-left{display:flex;align-items:center;gap:8px;}
 .bb-center{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;}
 .bb-right{display:flex;align-items:center;gap:12px;}
@@ -1855,7 +1940,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 .xf-left-date{font-family:var(--font-b);font-size:12px;color:var(--ink3);margin-top:4px;}
 .xf-left-shot{width:100%;max-width:100%;max-height:calc(100vh - 180px);border-radius:16px;overflow:hidden;background:#fff;display:flex;align-items:flex-start;justify-content:center;box-shadow:0 0 0 4px rgba(29,161,242,.1),0 16px 40px rgba(0,0,0,.15);}
 .xf-left-img{width:100%;max-height:calc(100vh - 180px);height:auto;display:block;object-fit:contain;object-position:top center;}
-.xf-left-text{padding:1.5rem;font-family:var(--font-b);font-size:clamp(14px,1.6vw,20px);line-height:1.6;color:var(--ink);background:#fff;min-height:80px;display:flex;align-items:flex-start;}
+.xf-left-text{padding:1rem 1.2rem 1.1rem;font-family:var(--font-b);font-size:clamp(12px,1.2vw,16px);line-height:1.45;color:var(--ink);background:#fff;min-height:64px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;border-top:1px solid rgba(0,0,0,.06);}
 .xf-left-text-block{width:100%;display:flex;flex-direction:column;background:#fff;}
 .xf-post-images{display:flex;flex-direction:column;gap:6px;padding:0 1rem 1rem;}
 .xf-post-img{width:100%;border-radius:10px;object-fit:cover;max-height:180px;border:1px solid rgba(29,161,242,.12);box-shadow:0 4px 14px rgba(0,0,0,.08);}
