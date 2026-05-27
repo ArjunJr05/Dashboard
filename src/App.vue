@@ -48,7 +48,7 @@
         <transition name="fade">
           <div v-if="cur===1 || cur===2" class="tb-meta-group">
             <div class="ss-platform-badge badge-top" :class="cur===1?'ios-badge':'and-badge'">
-              <img :src="cur===1?'/ios.png':'/android.png'" class="ss-badge-img-sm" />
+              <img :src="cur===1?'/ios.png':'/play.png'" class="ss-badge-img-sm" />
               <div class="ss-badge-name">{{ cur===1?'App Store':'Play Store' }} <span class="ss-rating-sm">{{ cur===1?ios.rating:android.rating }}</span></div>
             </div>
           </div>
@@ -196,7 +196,7 @@
                 <div class="ov-card-shimmer"></div>
                 <div class="ov-card-head">
                   <div class="ov-card-platform">
-                    <img src="/android.png" class="ov-plat-icon ov-plat-android" alt="Android" />
+                    <img src="/play.png" class="ov-plat-icon ov-plat-android" alt="Android" />
                     <div>
                       <div class="ov-plat-name">Play Store</div>
                       <div class="ov-plat-sub">Android</div>
@@ -338,87 +338,92 @@
 
       <!-- ══════════════ SLIDE 1: APP STORE ══════════════ -->
       <div v-if="isSlideEnabled(1)" class="slide" :class="{sin: cur===1, sout: exitSlide===1}">
-        <div class="slide-inner cluster-slide">
+        <div class="slide-inner xf-slide">
           <div class="ov-ambient">
             <div class="ov-amb-orb ov-amb-1" style="background:radial-gradient(circle,rgba(255,184,0,0.1),transparent 70%)"></div>
             <div class="ov-amb-orb ov-amb-2" style="background:radial-gradient(circle,rgba(255,255,255,0.05),transparent 70%)"></div>
           </div>
 
-          <!-- BUBBLE GRID: 5 clusters, each with emoji hub + surrounding speech-bubble cards -->
-          <div class="bubble-grid" :data-active="iosActiveCount">
-            <template v-for="s in sentimentOrder" :key="'ios-node-'+s.key">
+          <div class="xf-right-comments">
+            <div class="xf-comments-list" :style="iosListStyle">
               <div
-                v-if="(iosSentimentGroups[s.key] || []).length > 0"
-                class="bc-cluster"
-                :style="{'--sc': s.color}"
+                v-for="(review, idx) in visibleIosReviews.slice(0, 8)"
+                :key="'as-review-'+idx"
+                class="ps-review-item"
+                :style="{'--emotion-color': sentimentColor(getEmotion(review))}"
               >
-                <div class="bc-sent-name">{{ s.label }}</div>
-                <div class="bc-hub">
-                  <div class="bc-hub-glow"></div>
-                  <div class="bc-hub-ring"></div>
-                  <EmotionFace :emotionKey="s.key" class="bc-emoji" />
-                </div>
-                <div class="bc-bubbles" :data-count="(iosSentimentGroups[s.key]||[]).length">
-                  <div
-                    v-for="(rev, bIdx) in (iosSentimentGroups[s.key]||[]).slice(0,5)"
-                    :key="'ios-b-'+s.key+bIdx"
-                    class="bc-bubble"
-                  >
-                    <div class="bcb-header">
-                      <div class="bcb-avatar" :style="{'background': s.color}">{{ (rev.author||'U')[0].toUpperCase() }}</div>
-                      <div class="bcb-header-meta">
-                        <span class="bcb-author">{{ rev.author||'User' }}</span>
-                        <span class="bcb-stars"><span v-for="i in 5" :key="i" class="bcb-star" :class="getStarClass(rev.rating||5,i)"></span></span>
-                      </div>
-                    </div>
-                    <div class="bcb-text">{{ rev.body }}</div>
+                <div class="xfc-avatar">{{ (review.author||'U')[0].toUpperCase() }}</div>
+                <div class="xfc-content">
+                  <div class="ps-review-header">
+                    <span class="xfc-author">{{ review.author }}</span>
+                    <span class="ps-review-stars"><span v-for="i in 5" :key="i" class="ps-star-sm" :class="getStarClass(review.rating||5,i)"></span></span>
+                    <span v-if="review.date" class="ps-review-date">{{ fmtReviewDate(review.date) }}</span>
                   </div>
+                  <div class="xfc-body">{{ review.body }}</div>
+                </div>
+                <div class="emotion-badge">
+                  <EmotionFace :emotionKey="getEmotion(review)" class="review-emotion-face" />
                 </div>
               </div>
-            </template>
+              <div v-if="!visibleIosReviews.length" class="xf-no-comments">
+                No App Store reviews yet
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- ══════════════ SLIDE 2: PLAY STORE ══════════════ -->
       <div v-if="isSlideEnabled(2)" class="slide" :class="{sin: cur===2, sout: exitSlide===2}">
-        <div class="slide-inner cluster-slide">
+        <div class="slide-inner xf-slide">
           <div class="ov-ambient">
             <div class="ov-amb-orb ov-amb-1" style="background:radial-gradient(circle,rgba(164,255,0,0.06),transparent 70%)"></div>
             <div class="ov-amb-orb ov-amb-2" style="background:radial-gradient(circle,rgba(255,255,255,0.05),transparent 70%)"></div>
           </div>
 
-          <div class="bubble-grid" :data-active="andActiveCount">
-            <template v-for="s in sentimentOrder" :key="'and-node-'+s.key">
-              <div
-                v-if="(andSentimentGroups[s.key] || []).length > 0"
-                class="bc-cluster"
-                :style="{'--sc': s.color}"
-              >
-                <div class="bc-sent-name">{{ s.label }}</div>
-                <div class="bc-hub">
-                  <div class="bc-hub-glow"></div>
-                  <div class="bc-hub-ring"></div>
-                  <EmotionFace :emotionKey="s.key" class="bc-emoji" />
-                </div>
-                <div class="bc-bubbles" :data-count="(andSentimentGroups[s.key]||[]).length">
-                  <div
-                    v-for="(rev, bIdx) in (andSentimentGroups[s.key]||[]).slice(0,5)"
-                    :key="'and-b-'+s.key+bIdx"
-                    class="bc-bubble"
-                  >
-                    <div class="bcb-header">
-                      <div class="bcb-avatar" :style="{'background': s.color}">{{ (rev.author||'U')[0].toUpperCase() }}</div>
-                      <div class="bcb-header-meta">
-                        <span class="bcb-author">{{ rev.author||'User' }}</span>
-                        <span class="bcb-stars"><span v-for="i in 5" :key="i" class="bcb-star" :class="getStarClass(rev.rating||5,i)"></span></span>
-                      </div>
-                    </div>
-                    <div class="bcb-text">{{ rev.body }}</div>
+          <!-- Left: Play Store app card -->
+          <!-- <div class="xf-left-panel">
+            <div class="ps-app-card">
+              <div class="ps-app-header">
+                <img src="/play.png" class="ps-app-icon" />
+                <div class="ps-app-info">
+                  <div class="ps-app-name">Arattai</div>
+                  <div class="ps-app-rating">
+                    <span v-for="i in 5" :key="i" class="ps-star" :class="getStarClass(android.rating||5,i)"></span>
+                    <span class="ps-rating-num">{{ android.rating }}</span>
                   </div>
                 </div>
               </div>
-            </template>
+              <div class="ps-app-desc">{{ android.description || 'Secure, simple messenger from India' }}</div>
+            </div>
+          </div> -->
+
+          <!-- Right: reviews list -->
+          <div class="xf-right-comments">
+            <div class="xf-comments-list" :style="andListStyle">
+              <div
+                v-for="(review, idx) in visibleAndReviews.slice(0, 8)"
+                :key="'ps-review-'+idx"
+                class="ps-review-item"
+                :style="{'--emotion-color': sentimentColor(getEmotion(review))}"
+              >
+                <div class="xfc-avatar">{{ (review.author||'U')[0].toUpperCase() }}</div>
+                <div class="xfc-content">
+                  <div class="ps-review-header">
+                    <span class="xfc-author">{{ review.author }}</span>
+                    <span class="ps-review-stars"><span v-for="i in 5" :key="i" class="ps-star-sm" :class="getStarClass(review.rating||5,i)"></span></span>
+                    <span v-if="review.date" class="ps-review-date">{{ fmtReviewDate(review.date) }}</span>
+                  </div>
+                  <div class="xfc-body">{{ review.body }}</div>
+                </div>
+                <div class="emotion-badge">
+                  <EmotionFace :emotionKey="getEmotion(review)" class="review-emotion-face" />
+                </div>
+              </div>
+              <div v-if="!visibleAndReviews.length" class="xf-no-comments">
+                No reviews yet
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -429,12 +434,8 @@
           <div class="news-left">
             <div class="nl-eyebrow">📰 Press Coverage</div>
             <div class="nl-big">IN THE<br><span class="nl-big-accent">HEAD</span><br>LINES</div>
-            <div class="news-count-pill">
-              <span class="ncp-num">{{ gnews.posts?.length || 0 }}</span>
-              <span class="ncp-txt">articles this sprint</span>
-            </div>
             <div class="ns-qr-wrap nl-qr-wrap" v-if="currentNews">
-              <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=300x300&format=svg&data='+encodeURIComponent(currentNews.resolved_url||currentNews.url)" class="ns-qr" alt="QR" />
+              <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=500x500&format=svg&data='+encodeURIComponent(currentNews.resolved_url||currentNews.url)" class="ns-qr" alt="QR" />
               <span class="ns-qr-lbl">SCAN FOR FULL STORY</span>
             </div>
             <div class="news-deco-dots">
@@ -481,60 +482,81 @@
 
           <!-- Left: post screenshot + dots — always visible -->
           <div class="xf-left-panel">
-            <div class="xf-left-label">
-              <div class="xf-left-eyebrow">LATEST POST</div>
-              <div class="xf-left-handle">@Arattai</div>
-              <div class="xf-left-date">{{ (twitter.recent_posts||[])[twitterIdx]?.date || '' }}</div>
-            </div>
-            <transition name="xf-pop" mode="out-in">
-              <div class="xf-left-shot" :key="'left-'+twitterIdx">
-                <div class="xf-left-text-block">
-                  <img v-if="(twitter.recent_posts||[])[twitterIdx]?.screenshot_url && !xImageFallback"
-                    :src="cacheBustUrl((twitter.recent_posts||[])[twitterIdx].screenshot_url)"
-                    class="xf-left-img" @error="xImageFallback=true" alt="tweet"/>
-                  <div v-else>
-                    <!-- Fallback Live Preview if no screenshots/images -->
-                    <div class="xf-fallback-preview">
-                      <img :src="'https://image.thum.io/get/width/1200/noanimate/' + (twitter.recent_posts||[])[twitterIdx]?.url" 
-                           class="xf-fallback-img" alt="live preview" />
-                    </div>
-
-                    <div v-if="((twitter.recent_posts||[])[twitterIdx]?.post_images||[]).length"
-                      class="xf-post-images">
-                      <img v-for="(imgUrl, imgIdx) in (twitter.recent_posts||[])[twitterIdx].post_images"
-                        :key="'postimg-'+twitterIdx+'-'+imgIdx"
-                        :src="cacheBustUrl(imgUrl)"
-                        class="xf-post-img"
-                        alt="post image"
-                        @error="$event.target.style.display='none'" />
+              <transition name="xf-pop" mode="out-in">
+                <div class="xf-post-card" :key="'left-'+twitterIdx">
+                  <div class="xf-post-header">
+                    <img src="/arattai_logo.png" class="xf-post-logo" />
+                    <div class="xf-post-author-info">
+                      <div class="xf-post-name">
+                        Arattai <img src="/verified.png" class="xf-post-verified" />
+                        <div class="xf-post-handle">@Arattai</div>
+                        <div class="xf-post-handle"> · </div>
+                        <div class="xf-post-handle">{{ formatPostDate((twitter.recent_posts||[])[twitterIdx]?.datetime || (twitter.recent_posts||[])[twitterIdx]?.date || '') }}</div>
+                      </div>
+                      
+                      
                     </div>
                   </div>
-
-                  <!-- Text block removed because Playwright screenshots already contain the tweet text -->
+                  
+                  <div class="xf-post-text">
+                    {{ (twitter.recent_posts||[])[twitterIdx]?.body }}
+                  </div>
+                  
+                  <div v-if="((twitter.recent_posts||[])[twitterIdx]?.post_images||[]).length" class="xf-post-images-grid">
+                     <img v-for="(imgUrl, imgIdx) in (twitter.recent_posts||[])[twitterIdx].post_images"
+                       :key="'postimg-'+twitterIdx+'-'+imgIdx"
+                       :src="imgUrl"
+                       class="xf-post-media-img"
+                       referrerpolicy="no-referrer"
+                       alt="post media"
+                       @error="$event.target.style.display='none'" />
+                  </div>
+                  
+                  <div class="xf-post-footer">
+                    <div class="xf-stat">
+                      <svg class="xf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      {{ (twitter.recent_posts||[])[twitterIdx]?.stats?.replies || '0' }}
+                    </div>
+                    <div class="xf-stat">
+                      <svg class="xf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                      {{ (twitter.recent_posts||[])[twitterIdx]?.stats?.reposts || '0' }}
+                    </div>
+                    <div class="xf-stat">
+                      <svg class="xf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                      {{ (twitter.recent_posts||[])[twitterIdx]?.stats?.likes || '0' }}
+                    </div>
+                    <div class="xf-stat">
+                      <svg class="xf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                      {{ (twitter.recent_posts||[])[twitterIdx]?.stats?.views || '0' }}
+                    </div>
+                    <div class="xf-stat xf-stat-right">
+                      <svg class="xf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                      <svg class="xf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </transition>
+              </transition>
             <div class="xf-dots">
               <span v-for="(p,pi) in (twitter.recent_posts||[])" :key="pi"
                 class="xf-dot" :class="{active: pi===twitterIdx}" @click="twitterIdx=pi"></span>
             </div>
           </div>
 
-          <!-- Right: sentiment cluster grid of comments -->
+          <!-- Right: comment cards — same layout as Play Store -->
           <div class="xf-right-comments">
-            <div class="xf-comments-header">
-              <span class="xf-right-eyebrow">💬 COMMENTS</span>
-              <span class="xf-right-count">{{ currentTwitterComments.length }} replies</span>
-            </div>
-            <div class="xf-comments-list">
+            <div class="xf-comments-list" :style="xCmtListStyle">
               <div
                 v-for="(comment, idx) in currentTwitterComments"
                 :key="'xc-'+twitterIdx+'-'+idx"
-                class="xf-comment-item"
+                class="ps-review-item"
+                style="--emotion-color: #1DA1F2"
               >
-                <div class="xfc-avatar">{{ (comment.author||'U')[0].toUpperCase() }}</div>
+                <div class="xfc-avatar xfc-avatar-x">{{ (comment.author||'U')[0].toUpperCase() }}</div>
                 <div class="xfc-content">
-                  <div class="xfc-author">{{ comment.author }}</div>
+                  <div class="ps-review-header">
+                    <span class="xfc-author">{{ comment.author }}</span>
+                    <span v-if="comment.date" class="ps-review-date">{{ fmtReviewDate(comment.date) }}</span>
+                  </div>
                   <div class="xfc-body">{{ comment.body }}</div>
                 </div>
               </div>
@@ -554,11 +576,11 @@
       <div class="progress-rail"><div class="progress-fill" :style="{width:prog+'%'}"></div></div>
       <div class="bb-left" @click="loadData" style="cursor:pointer;" title="Refresh"></div>
       <div class="bb-center">
-        <div v-for="s in slideDefs" :key="s.id" v-show="isSlideEnabled(s.id)" class="nav-pill nav-pill-sm" :class="{'pill-on': cur===s.id}" @click="go(s.id)">{{ s.name }}</div>
+        <div class="bb-nav-pills">
+          <div v-for="s in slideDefs" :key="s.id" v-show="isSlideEnabled(s.id)" class="nav-pill nav-pill-sm" :class="{'pill-on': cur===s.id}" @click="go(s.id)">{{ s.name }}</div>
+        </div>
       </div>
-      <div class="bb-right">
-        <span class="bb-counter">{{ curDisplayIndex }} / {{ totalVisible }}</span>
-      </div>
+      <div class="bb-right"></div>
     </div>
 
     <!-- Bottom-right settings (UI flow controls only) -->
@@ -708,6 +730,17 @@ const sentimentOrder = [
 ]
 
 function sentimentColor(key) { return sentimentOrder.find(s => s.key === key)?.color || '#1A1400' }
+
+function getSentimentGif(key) {
+  const gifMap = {
+    'neutral': '/satisfactory.gif',
+    'happy': '/good.gif',
+    'ecstatic': '/excellent.gif',
+    'frustrated': '/unsatisfactory.gif',
+    'angry': '/unsatisfactory.gif'
+  }
+  return gifMap[key] || '/satisfactory.gif'
+}
 
 function getCarouselClass(ridx, activeIdx, total) {
   const diff = ridx - activeIdx
@@ -874,7 +907,7 @@ const gnews   = computed(() => data.value.google_news || {})
 const twitter = computed(() => data.value.twitter     || { recent_posts: [] })
 const allRevs = computed(() => [...(ios.value.reviews||[]),...(android.value.reviews||[])])
 const totalSignals = computed(() => allRevs.value.length + (gnews.value.posts?.length || 0) + (twitter.value.recent_posts?.length || 0))
-const API_BASE = 'https://api.codetabs.com/v1/proxy?quest=https://arattai-50041622599.development.catalystappsail.in'
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 const apiUrl = (p) => {
   if (!p) return ''
@@ -914,20 +947,55 @@ function getEmotion(rev){
   if(r>=5)return 'ecstatic';if(r>=4)return 'happy';if(r===3)return 'neutral';if(r===2)return 'frustrated';return 'angry'
 }
 
-const visibleIosReviews = computed(() => {
-  const revs = ios.value.reviews || []
+// ── Build balanced review pages: 3 big (longer half) + 2 small (shorter half) ──
+function buildReviewPages(revs) {
   if (!revs.length) return []
-  const round = globalCycle.value % Math.max(1, Math.ceil(revs.length / 5))
-  const start = round * 5
-  return revs.slice(start, start + 5)
+  const BIG_PER_PAGE = 3
+  const SML_PER_PAGE = 2
+
+  // Sort by body length to get a relative split
+  const sorted = [...revs].sort((a, b) => (b.body || '').length - (a.body || '').length)
+  const midpoint = Math.ceil(sorted.length / 2)
+  const big = sorted.slice(0, midpoint)          // longer half
+  const sml = sorted.slice(midpoint)             // shorter half
+
+  // If one bucket is empty (e.g. only 1 review) fall back to plain 5-at-a-time
+  if (!big.length || !sml.length) {
+    const pages = []
+    for (let i = 0; i < revs.length; i += 5) pages.push(revs.slice(i, i + 5))
+    return pages
+  }
+
+  const pages = []
+  const totalPages = Math.max(
+    Math.ceil(big.length / BIG_PER_PAGE),
+    Math.ceil(sml.length / SML_PER_PAGE)
+  )
+  for (let p = 0; p < totalPages; p++) {
+    // Wrap both buckets so we never run out
+    const bigSlice = Array.from({ length: BIG_PER_PAGE }, (_, i) => big[(p * BIG_PER_PAGE + i) % big.length])
+    const smlSlice = Array.from({ length: SML_PER_PAGE }, (_, i) => sml[(p * SML_PER_PAGE + i) % sml.length])
+    // Interleave: big, small, big, big, small → fills 2-col grid nicely
+    pages.push([bigSlice[0], smlSlice[0], bigSlice[1], bigSlice[2], smlSlice[1]])
+  }
+  return pages
+}
+
+const iosReviewPages = computed(() => buildReviewPages(ios.value.reviews || []))
+const andReviewPages = computed(() => buildReviewPages(android.value.reviews || []))
+
+const visibleIosReviews = computed(() => {
+  const pages = iosReviewPages.value
+  if (!pages.length) return []
+  const page = globalCycle.value % pages.length
+  return pages[page]
 })
 
 const visibleAndReviews = computed(() => {
-  const revs = android.value.reviews || []
-  if (!revs.length) return []
-  const round = globalCycle.value % Math.max(1, Math.ceil(revs.length / 5))
-  const start = round * 5
-  return revs.slice(start, start + 5)
+  const pages = andReviewPages.value
+  if (!pages.length) return []
+  const page = globalCycle.value % pages.length
+  return pages[page]
 })
 
 const visibleNews = computed(() => {
@@ -1038,6 +1106,25 @@ function scheduleNextTwitter(){
   },12000)
 }
 
+function formatPostDate(raw) {
+  if (!raw) return ''
+  const d = new Date(raw)
+  if (isNaN(d.getTime())) return raw
+  const day = d.getDate()
+  const month = d.toLocaleDateString('en-US', { month: 'long' })
+  const year = d.getFullYear()
+  return `${day} ${month} ${year}`
+}
+
+function fmtReviewDate(raw) {
+  if (!raw) return ''
+  // raw is YYYY-MM-DD — parse as local date to avoid UTC offset shifting day
+  const [y, m, day] = raw.split('-').map(Number)
+  if (!y || !m || !day) return raw
+  const d = new Date(y, m - 1, day)
+  const monthName = d.toLocaleDateString('en-US', { month: 'long' })
+  return `${day} ${monthName} ${y}`
+}
 function getStarClass(rating,index){const diff=rating-(index-1);if(diff>=.75)return 'star-full';if(diff>=.25)return 'star-half';return 'star-empty'}
 function fmtNum(n){return new Intl.NumberFormat('en-IN').format(n)}
 function fmtCompact(n){
@@ -1150,9 +1237,48 @@ function getCardScale(activeCount, reviewCount) {
   if (activeCount === 2) return reviewCount <= 2 ? 1.05 : 0.85;
   if (activeCount === 3) return reviewCount <= 2 ? 0.95 : 0.82;
   if (activeCount === 4) return reviewCount <= 1 ? 0.92 : 0.78;
-  // 5 active sentiments: 1 card per row is the sweet spot
   return reviewCount <= 1 ? 1.0 : 0.72;
 }
+
+// ── Dynamic review list sizing ──────────────────────────────────────────────
+// Returns CSS-variable values that make all cards fit the viewport without
+// scrolling. Scales font size down as card count and text density increase.
+function getReviewConfig(reviews, xPanel = false) {
+  const count = (reviews || []).length
+  if (!count) return { body:'17px', author:'14px', pad:'1rem 1.2rem', face:'76px', clamp:'7', cols: xPanel ? '1' : '2' }
+
+  const totalChars = reviews.reduce((s, r) => s + (r.body || '').length, 0)
+  const avgChars   = totalChars / count
+  // density = total text units; ~100 chars ≈ one visual "line" at mid-size font
+  const density    = count + (avgChars / 90)
+
+  // For the X-comments narrow right-panel always use 1 column
+  const cols = xPanel ? '1' : (count >= 4 ? '2' : '1')
+
+  if (density <= 3)  return { body:'19px', author:'15px', pad:'1rem 1.2rem',    face:'80px', clamp:'8',  cols }
+  if (density <= 5)  return { body:'18px', author:'15px', pad:'0.95rem 1.1rem', face:'76px', clamp:'7',  cols }
+  if (density <= 7)  return { body:'17px', author:'14px', pad:'0.9rem 1rem',    face:'70px', clamp:'6',  cols }
+  if (density <= 9)  return { body:'16px', author:'13px', pad:'0.8rem 1rem',    face:'64px', clamp:'5',  cols }
+  if (density <= 12) return { body:'15px', author:'13px', pad:'0.75rem 0.95rem',face:'56px', clamp:'4',  cols }
+  if (density <= 15) return { body:'14px', author:'12px', pad:'0.65rem 0.85rem',face:'50px', clamp:'4',  cols }
+  if (density <= 19) return { body:'13px', author:'12px', pad:'0.6rem 0.8rem',  face:'44px', clamp:'3',  cols }
+  return               { body:'12px', author:'11px', pad:'0.5rem 0.7rem',  face:'38px', clamp:'3',  cols }
+}
+
+function reviewConfigToVars(cfg) {
+  return {
+    '--r-body':   cfg.body,
+    '--r-author': cfg.author,
+    '--r-pad':    cfg.pad,
+    '--r-face':   cfg.face,
+    '--r-clamp':  cfg.clamp,
+    '--r-cols':   cfg.cols,
+  }
+}
+
+const iosListStyle  = computed(() => reviewConfigToVars(getReviewConfig(visibleIosReviews.value)))
+const andListStyle  = computed(() => reviewConfigToVars(getReviewConfig(visibleAndReviews.value)))
+const xCmtListStyle = computed(() => reviewConfigToVars(getReviewConfig(currentTwitterComments.value)))
 </script>
 
 <style>
@@ -1799,11 +1925,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 .ns-source-badge{width:100%;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 24px;border-radius:calc(3vh - 2px) calc(3vh - 2px) 0 0;background:var(--y-warm);border-bottom:1.5px solid rgba(200,160,0,.25);border-left:0;border-right:0;border-top:0;margin-bottom:0;box-shadow:none;}
 .ns-source-banner{position:relative;z-index:3;}
 .ns-source{font-family:var(--font-d);font-weight:900;color:var(--ink);font-size:clamp(26px,3.2vw,52px);letter-spacing:.03em;line-height:.95;text-transform:uppercase;}
-.ns-date{font-family:var(--font-b);font-size:12px;color:var(--ink);background:rgba(200,160,0,.15);border:1px solid rgba(200,160,0,.25);border-radius:999px;padding:6px 10px;white-space:nowrap;}
+.ns-date{font-family:var(--font-b);font-size:clamp(14px,1.6vw,20px);font-weight:700;color:var(--ink);background:rgba(200,160,0,.15);border:1px solid rgba(200,160,0,.25);border-radius:999px;padding:7px 14px;white-space:nowrap;}
 .ns-title{font-family:var(--font-d);font-size:clamp(30px,5vh,64px);font-weight:800;color:var(--ink);line-height:1.08;margin-bottom:0;}
 .ns-footer{display:flex;align-items:center;justify-content:flex-end;}
 .ns-qr-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}
-.ns-qr{width:14vh;height:14vh;border:2.5px solid var(--y-deep);border-radius:10px;background:#fff;}
+.ns-qr{width:24vh;height:24vh;border:2.5px solid var(--y-deep);border-radius:10px;background:#fff;}
 .ns-qr-lbl{font-family:var(--font-d);font-size:11px;font-weight:800;color:var(--ink2);letter-spacing:.1em;text-align:center;}
 .ns-pagination{display:flex;gap:7px;}
 .ns-dot{width:7px;height:7px;border-radius:50%;background:rgba(0,0,0,.15);transition:all .3s;cursor:pointer;}
@@ -1820,9 +1946,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 .progress-rail{position:absolute;top:0;left:0;right:0;height:4px;background:rgba(200,160,0,.15);z-index:10;}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--y-deep),#ff8f00);box-shadow:0 0 10px rgba(200,160,0,.6);transition:width 0.1s linear;}
 .bb-left{display:flex;align-items:center;gap:8px;}
-.bb-center{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;}
+.bb-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
+.bb-nav-pills{display:flex;align-items:center;justify-content:center;gap:8px;}
 .bb-right{display:flex;align-items:center;gap:12px;}
-.bb-counter{font-family:var(--font-d);font-size:12px;color:var(--ink3);}
+
 
 .slide-settings-btn{
   position:fixed;
@@ -1896,13 +2023,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 }
 .xf-left-panel {
   flex-shrink: 0;
-  width: 480px;
+  width: 500px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: .8rem;
-  padding: 1.2rem 1.2rem 1rem 1.8rem;
+  /* gap: .8rem; */
+  /* padding: 1.2rem 1.4rem 1rem 2rem; */
   position: relative;
   z-index: 6;
   border-right: 1.5px solid rgba(206,171,57,0.18);
@@ -1914,7 +2041,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0;
+  padding: 10px 0 0;
   position: relative;
   z-index: 2;
   overflow: hidden;
@@ -1938,87 +2065,349 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 .xf-left-eyebrow{font-family:var(--font-b);font-size:10px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:rgba(29,161,242,.7);margin-bottom:4px;}
 .xf-left-handle{font-family:var(--font-d);font-size:clamp(22px,3vw,36px);font-weight:900;color:var(--ink);line-height:1;}
 .xf-left-date{font-family:var(--font-b);font-size:12px;color:var(--ink3);margin-top:4px;}
-.xf-left-shot{width:100%;max-width:100%;max-height:calc(100vh - 180px);border-radius:16px;overflow:hidden;background:#fff;display:flex;align-items:flex-start;justify-content:center;box-shadow:0 0 0 4px rgba(29,161,242,.1),0 16px 40px rgba(0,0,0,.15);}
-.xf-left-img{width:100%;max-height:calc(100vh - 180px);height:auto;display:block;object-fit:contain;object-position:top center;}
-.xf-left-text{padding:1rem 1.2rem 1.1rem;font-family:var(--font-b);font-size:clamp(12px,1.2vw,16px);line-height:1.45;color:var(--ink);background:#fff;min-height:64px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;border-top:1px solid rgba(0,0,0,.06);}
-.xf-left-text-block{width:100%;display:flex;flex-direction:column;background:#fff;}
-.xf-post-images{display:flex;flex-direction:column;gap:6px;padding:0 1rem 1rem;}
-.xf-post-img{width:100%;border-radius:10px;object-fit:cover;max-height:180px;border:1px solid rgba(29,161,242,.12);box-shadow:0 4px 14px rgba(0,0,0,.08);}
+.xf-post-card {
+  width: 75%;
+  max-width: 100%;
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  min-height: 70vh;
+  justify-content: space-between;
+}
+.xf-post-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.xf-post-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+.xf-post-author-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.xf-post-name {
+  font-family: var(--font-b);
+  font-size: 14px;
+  font-weight: 700;
+  color: #0F172A;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.xf-post-verified {
+  width: 14px;
+  height: 14px;
+}
+.xf-post-handle {
+  font-family: var(--font-b);
+  font-size: 12px;
+  color: #64748B;
+  font-weight: 600;
+}
+.xf-post-date {
+  font-family: var(--font-b);
+  font-size: 11px;
+  color: #94A3B8;
+  margin-top: 1px;
+}
+.xf-post-text {
+  font-family: var(--font-b);
+  font-size: 13px;
+  color: #111827;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-weight: 700;
+}
+.xf-post-images-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.xf-post-media-img {
+  width: 100%;
+  max-height: 70vh;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+}
+.xf-post-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  padding-top: 8px;
+  border-top: 1px solid #E2E8F0;
+  margin-top: 0;
+}
+.xf-stat {
+  font-family: var(--font-b);
+  font-size: 12px;
+  color: #64748B;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.xf-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #64748B;
+}
+.xf-stat-right {
+  margin-left: auto;
+  gap: 14px;
+}
+.xf-stat-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.6;
+}
 .xf-dots{display:flex;gap:8px;justify-content:center;z-index:2;}
 .xf-dot{width:8px;height:8px;border-radius:50%;background:rgba(0,0,0,.14);cursor:pointer;transition:all .3s cubic-bezier(.22,1,.36,1);}
 .xf-dot.active{background:#1DA1F2;width:24px;border-radius:4px;box-shadow:0 0 8px rgba(29,161,242,.5);}
 .xf-right-eyebrow{font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:#1DA1F2;}
 .xf-right-count{font-family:var(--font-b);font-size:12px;color:var(--ink3);}
 
-/* Simple comment list (no sentiment clustering) */
+/* ── Review / comment list — CSS-Grid, dynamic sizing via CSS vars ── */
 .xf-comments-list {
   flex: 1;
-  overflow: hidden;
-  padding: 10px 18px 20px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  gap: 15px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 14px 12px;
+  /* CSS columns → each column is independent, no equal row-height forcing */
+  columns: var(--r-cols, 2);
+  column-gap: 10px;
+  /* default variable values (overridden per-slide via :style binding) */
+  --r-body:   15px;
+  --r-author: 13px;
+  --r-pad:    0.8rem 1rem;
+  --r-face:   64px;
+  --r-clamp:  4;
+  --r-cols:   2;
+  scrollbar-width: none; /* hide scrollbar visually */
 }
-/* If exactly 5 comments, make the 5th one span both columns to fill the gap */
-.xf-comments-list > .xf-comment-item:nth-child(5):last-child {
-  grid-column: span 2;
-}
+.xf-comments-list::-webkit-scrollbar { display: none; }
 .xf-comment-item {
   display: flex;
-  gap: 14px;
-  padding: 1.2rem 1.4rem;
+  gap: 8px;
+  padding: var(--r-pad);
   background: #fff;
-  border: 1px solid rgba(206,171,57,0.15);
+  border: 1.5px solid rgba(206,171,57,0.2);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  align-items: flex-start;
+  min-width: 0;
+  break-inside: avoid;       /* never split a card across columns */
+  margin-bottom: 10px;       /* gap between cards in same column */
+}
+.ps-review-item {
+  display: flex;
+  gap: 8px;
+  padding: var(--r-pad);
+  background: #fff;
+  border: 2px solid var(--emotion-color, #7888cc);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  align-items: flex-start;
+  min-width: 0;
+  break-inside: avoid;       /* never split a card across columns */
+  margin-bottom: 10px;       /* gap between cards in same column */
+}
+
+.ps-review-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.ps-review-stars { display: flex; gap: 2px; align-items: center; }
+.ps-star-sm {
+  width: 11px; height: 11px;
+  display: inline-block;
+  background: #f7d747;
+  clip-path: polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);
+}
+.ps-star-sm.star-empty { background: rgba(0,0,0,0.12); }
+.ps-star-sm.star-half  { background: linear-gradient(90deg, #f7d747 50%, rgba(0,0,0,0.12) 50%); }
+.ps-review-date {
+  font-family: var(--font-b);
+  font-size: 10px;
+  font-weight: 800;
+  color: #94A3B8;
+  background: rgba(148,163,184,0.1);
+  border: 1px solid rgba(148,163,184,0.2);
   border-radius: 20px;
-  transition: all 0.2s;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
-  height: 100%;
+  padding: 1px 7px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.emotion-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: flex;
   align-items: center;
 }
-.xf-comment-item:hover {
-  background: var(--y-cream);
-  transform: translateX(4px);
-  border-color: var(--y-main);
+.review-emotion-face {
+  width:     var(--r-face) !important;
+  height:    var(--r-face) !important;
+  min-width: var(--r-face) !important;
+  transition: width 0.3s, height 0.3s;
 }
 .xfc-avatar {
-  width: 32px;
-  height: 32px;
+  width: 26px; height: 26px;
   border-radius: 50%;
   background: linear-gradient(135deg, #1DA1F2, #0A7BC5);
   color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   font-family: var(--font-d);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 900;
   flex-shrink: 0;
-  box-shadow: 0 3px 8px rgba(29,161,242,0.22);
+  box-shadow: 0 2px 6px rgba(29,161,242,0.22);
+  margin-top: 2px;
+}
+/* X Feed comment avatar — X brand dark tone */
+.xfc-avatar-x {
+  background: linear-gradient(135deg, #14171A, #2D3748);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
 }
 .xfc-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 4px;
+}
+.xfc-author-row {
+  display: flex;
+  align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 .xfc-author {
   font-family: var(--font-d);
-  font-size: 16px;
+  font-size: var(--r-author);
   font-weight: 850;
   color: var(--ink);
-  line-height: 1;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xfc-comment-date {
+  font-family: var(--font-b);
+  font-size: 10px;
+  font-weight: 800;
+  color: #94A3B8;
+  background: rgba(148,163,184,0.1);
+  border: 1px solid rgba(148,163,184,0.2);
+  border-radius: 20px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .xfc-body {
   font-family: var(--font-b);
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: var(--r-body);
+  line-height: 1.45;
   color: var(--ink2);
-  font-weight: 500;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-weight: 700;
+  white-space: normal;
+  word-wrap: break-word;
+}
+/* X Feed comments always render bigger than auto-scaled review text */
+.xf-right-comments .xf-comments-list {
+  --r-body:   18px;
+  --r-author: 16px;
+  --r-pad:    1rem 1.1rem;
+  --r-face:   0px;
+}
+/* App Store / Play Store empty state */
+.bc-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+  padding: 3rem;
+  text-align: center;
+}
+.bc-empty-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,246,200,0.9));
+  border: 1.5px solid rgba(206,171,57,0.25);
+  box-shadow: 0 8px 24px rgba(160,120,0,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bc-empty-store-icon {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+.bc-empty-title {
+  font-family: var(--font-d);
+  font-size: clamp(22px, 3vw, 36px);
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.bc-empty-sub {
+  font-family: var(--font-b);
+  font-size: clamp(13px, 1.4vw, 16px);
+  color: var(--ink3);
+  max-width: 460px;
+  line-height: 1.5;
+}
+.bc-empty-rating {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--y-main);
+  border-radius: 100px;
+  padding: 10px 24px;
+  box-shadow: 0 6px 20px rgba(200,160,0,.28);
+  border: 1.5px solid var(--y-deep);
+  margin-top: 0.5rem;
+}
+.bc-empty-score {
+  font-family: var(--font-d);
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--ink);
+}
+.bc-empty-stars {
+  display: flex;
+  gap: 2px;
+}
+.bc-empty-count {
+  font-family: var(--font-b);
+  font-size: 12px;
+  color: var(--ink2);
+  text-transform: uppercase;
+  letter-spacing: .08em;
 }
 .xf-no-comments {
   text-align: center;
@@ -2039,46 +2428,41 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 .bubble-grid {
   position: absolute;
   inset: 0;
-  display: grid;
-  /* 1 active  → 1 col;  2 → 2;  3 → 3;  4 → 2×2;  5 → 3+2 */
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 10px;
-  padding: 10px 14px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 40px;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: auto;
+  justify-content: center;
+  align-items: stretch;
 }
 
-/* 1–2 clusters: fewer columns */
-.bubble-grid[data-active="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-.bubble-grid[data-active="2"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
-.bubble-grid[data-active="3"] { grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr; }
-.bubble-grid[data-active="4"] { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
-/* 5: first row 3 cols, second row 2 cols (centred via subgrid trick) */
-.bubble-grid[data-active="5"] { grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(2, 1fr); }
-.bubble-grid[data-active="5"] .bc-cluster:nth-child(1) { grid-column: span 2; }
-.bubble-grid[data-active="5"] .bc-cluster:nth-child(2) { grid-column: span 2; }
-.bubble-grid[data-active="5"] .bc-cluster:nth-child(3) { grid-column: span 2; }
-.bubble-grid[data-active="5"] .bc-cluster:nth-child(4) { grid-column: 2 / span 2; }
-.bubble-grid[data-active="5"] .bc-cluster:nth-child(5) { grid-column: 4 / span 2; }
+/* All active states use same vertical layout */
+.bubble-grid[data-active="1"] { }
+.bubble-grid[data-active="2"] { }
+.bubble-grid[data-active="3"] { }
+.bubble-grid[data-active="4"] { }
+.bubble-grid[data-active="5"] { }
 
-/* ── Cluster card — warm cream style matching overview iOS/Android cards ── */
+/* ── Cluster card — horizontal layout with emoji on right ── */
 .bc-cluster {
   position: relative;
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  justify-items: center;
-  gap: 0;
-  padding: 12px 10px 10px;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 32px;
   background: linear-gradient(160deg, rgba(255,255,255,0.92) 0%, rgba(255,246,200,0.93) 100%);
   border: 1.5px solid rgba(206,171,57,0.22);
-  border-radius: 22px;
+  border-radius: 20px;
   box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.85), 0 10px 28px rgba(160,120,0,0.12);
   overflow: hidden;
   backdrop-filter: blur(8px);
   transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  flex: 1;
+  min-height: 120px;
 }
 .bc-cluster::before {
   content: '';
@@ -2108,40 +2492,41 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
   border-color: rgba(206,171,57,0.45);
 }
 
-/* ── Sentiment label above hub ── */
+/* ── Sentiment label and content ── */
 .bc-sent-name {
   font-family: var(--font-d);
-  font-size: clamp(14px, 1.6vw, 22px);
+  font-size: clamp(22px, 2.2vw, 32px);
   font-weight: 950;
   color: var(--sc);
   letter-spacing: 0.04em;
-  text-align: center;
+  text-align: left;
   text-shadow: 0 1px 6px rgba(0,0,0,0.08);
-  margin-bottom: 2px;
+  margin-bottom: 0;
   z-index: 2;
   white-space: nowrap;
+  flex: 1;
 }
 
-/* ── Emoji Hub ── */
+/* ── Emoji Hub - positioned on right ── */
 .bc-hub {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(40px, 4.5vw, 65px);
-  height: clamp(40px, 4.5vw, 65px);
+  width: clamp(80px, 6vw, 100px);
+  height: clamp(80px, 6vw, 100px);
   flex-shrink: 0;
   z-index: 2;
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .bc-hub-glow {
   position: absolute;
-  inset: -12px;
+  inset: -16px;
   border-radius: 50%;
   background: radial-gradient(circle, var(--sc, #aaa) 0%, transparent 70%);
   opacity: 0.35;
-  filter: blur(14px);
+  filter: blur(18px);
   animation: bc-pulse 3s ease-in-out infinite alternate;
   pointer-events: none;
 }
@@ -2170,17 +2555,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
 }
 .bc-emoji > div, .bc-emoji > div > * { width: 100% !important; height: 100% !important; }
 
-/* ── Bubble cards area ── */
+/* ── Bubble cards area - display inline ── */
 .bc-bubbles {
-  width: 100%;
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  justify-content: center;
-  align-content: flex-start;
-  overflow: hidden;
-  max-height: none;
-  padding-top: 6px;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  width: 100%;
 }
 
 /* ── Individual speech-bubble card — warm cream matching overview ── */
@@ -2269,10 +2650,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
   font-weight: 600;
   color: var(--ink);
   line-height: 1.4;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 5;
+  word-wrap: break-word;
+  white-space: normal;
 }
 
 /* Warm scene bg for slides 1 & 2 — matches overview palette #fff9eb */

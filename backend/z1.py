@@ -480,16 +480,24 @@ def _ensure_valid_image_url(post):
 # ── FETCHERS ──────────────────────────────────────────────
 def fetch_appstore():
     print(f"[{now()}] Fetching App Store (Dynamic Metadata + Reviews)...")
-    res_data = {"rating": 4.7, "rating_count": 19400, "downloads": None, "downloads_note": "Apple App Store does not publish download count", "reviews": []}
+    res_data = {"rating": 4.7, "rating_count": 19400, "total_ratings": 19400, "downloads": None, "downloads_count": 0, "downloads_note": "Apple App Store does not publish download count", "reviews": []}
     try:
         # 1. LIVE METADATA (Lookup API)
+        print(f"[{now()}] [AppStore] Fetching metadata from iTunes Lookup API...")
         lookup_url = f"https://itunes.apple.com/lookup?id={APP_STORE_ID}&country=in"
         lr = requests.get(lookup_url, timeout=10)
+        print(f"[{now()}] [AppStore] Lookup API response: {lr.status_code}")
         if lr.ok:
             results = lr.json().get("results", [])
             if results:
                 res_data["rating"] = round(results[0].get("averageUserRating", 4.7), 1)
                 res_data["rating_count"] = results[0].get("userRatingCount", 19400)
+                res_data["total_ratings"] = res_data["rating_count"]
+                print(f"[{now()}] [AppStore] ✓ Metadata: rating={res_data['rating']}, count={res_data['rating_count']}")
+            else:
+                print(f"[{now()}] [AppStore] WARNING: No results in lookup response")
+        else:
+            print(f"[{now()}] [AppStore] ERROR: Lookup API failed - {lr.status_code}")
 
         # 2. RECENT REVIEWS (Multi-Market Recovery - Collect up to 10)
         # Try pages 1 and 2 of Indian feed first, fallback to Global
@@ -499,46 +507,107 @@ def fetch_appstore():
             f"https://itunes.apple.com/in/rss/customerreviews/id={APP_STORE_ID}/sortby=mostrecent/json",
             f"https://itunes.apple.com/rss/customerreviews/id={APP_STORE_ID}/json"
         ]
-        
+
+        print(f"[{now()}] [AppStore] Attempting to fetch reviews from {len(rss_urls)} RSS endpoints...")
         rss_success = False
-        for url in rss_urls:
+        for url_idx, url in enumerate(rss_urls, 1):
             if len(res_data["reviews"]) >= 10:
+                print(f"[{now()}] [AppStore] ✓ Reached 10 reviews, stopping")
                 break
             try:
+                print(f"[{now()}] [AppStore] Trying RSS URL {url_idx}/{len(rss_urls)}: {url[:80]}...")
                 r = requests.get(url, timeout=10)
+                print(f"[{now()}] [AppStore] Response {url_idx}: status={r.status_code}, content_length={len(r.text)}")
+
                 if r.ok:
                     data_json = r.json()
                     entries = data_json.get("feed", {}).get("entry", [])
-                    if not entries: continue 
-                    
-                    if not isinstance(entries, list): entries = [entries]
-                    
+                    print(f"[{now()}] [AppStore] Found {len(entries) if isinstance(entries, list) else 1} entries in feed")
+
+                    if not entries:
+                        print(f"[{now()}] [AppStore] No entries found, skipping this URL")
+                        continue
+
+                    if not isinstance(entries, list):
+                        entries = [entries]
+
                     # Collect up to 20 most recent reviews
-                    for ent in entries:
+                    for ent_idx, ent in enumerate(entries):
                         if len(res_data["reviews"]) >= 20:
+                            print(f"[{now()}] [AppStore] Reached 20 reviews limit")
                             break
-                        if "im:rating" not in ent: continue
-                        
+                        if "im:rating" not in ent:
+                            print(f"[{now()}] [AppStore] Skipping entry {ent_idx}: no im:rating field")
+                            continue
+
                         # Extract real date if available
                         raw_date = ent.get("updated", {}).get("label", "Recently")
                         display_date = raw_date.split('T')[0] if 'T' in raw_date else "Recently"
-                        
+
+                        author = ent.get("author", {}).get("name", {}).get("label", "User")
+                        rating = int(ent.get("im:rating", {}).get("label", 5))
+                        body = ent.get("content", {}).get("label", "")
+
                         res_data["reviews"].append({
-                            "author": ent.get("author", {}).get("name", {}).get("label", "User"),
-                            "body": ent.get("content", {}).get("label", ""),
-                            "rating": int(ent.get("im:rating", {}).get("label", 5)),
+                            "author": author,
+                            "body": body,
+                            "rating": rating,
                             "date": display_date
                         })
-                    
+                        print(f"[{now()}] [AppStore] ✓ Added review {len(res_data['reviews'])}: {author[:20]} - {rating}⭐")
+
                     if res_data["reviews"]:
                         rss_success = True
-            except: continue
+                        print(f"[{now()}] [AppStore] ✓ Successfully fetched {len(res_data['reviews'])} reviews from this URL")
+                else:
+                    print(f"[{now()}] [AppStore] HTTP error on URL {url_idx}: {r.status_code}")
+            except Exception as url_err:
+                print(f"[{now()}] [AppStore] ERROR on URL {url_idx}: {type(url_err).__name__}: {url_err}")
+                continue
 
-        # No longer using synthetic fallbacks to ensure only live data is shown
-        pass
+        if not rss_success:
+            # Retry once after 20s — Apple often rate-limits the first call of a new session
+            print(f"[{now()}] [AppStore] WARNING: No reviews fetched. Retrying in 20s...")
+            time.sleep(20)
+            for url in [
+                f"https://itunes.apple.com/rss/customerreviews/id={APP_STORE_ID}/sortby=mostrecent/json",
+                f"https://itunes.apple.com/us/rss/customerreviews/id={APP_STORE_ID}/sortby=mostrecent/json",
+            ]:
+                try:
+                    r = requests.get(url, timeout=15)
+                    if r.ok:
+                        entries = r.json().get("feed", {}).get("entry", [])
+                        if not isinstance(entries, list):
+                            entries = [entries]
+                        for ent in entries:
+                            if len(res_data["reviews"]) >= 10:
+                                break
+                            if "im:rating" not in ent:
+                                continue
+                            raw_date = ent.get("updated", {}).get("label", "Recently")
+                            display_date = raw_date.split('T')[0] if 'T' in raw_date else "Recently"
+                            res_data["reviews"].append({
+                                "author": ent.get("author", {}).get("name", {}).get("label", "User"),
+                                "body":   ent.get("content", {}).get("label", ""),
+                                "rating": int(ent.get("im:rating", {}).get("label", 5)),
+                                "date":   display_date,
+                            })
+                        if res_data["reviews"]:
+                            print(f"[{now()}] [AppStore] ✓ Retry succeeded: {len(res_data['reviews'])} reviews from {url}")
+                            break
+                except Exception as retry_err:
+                    print(f"[{now()}] [AppStore] Retry failed: {retry_err}")
+            if not res_data["reviews"]:
+                print(f"[{now()}] [AppStore] All retries failed — returning empty reviews (previous data will be preserved by run_fetch_cycle)")
+        else:
+            print(f"[{now()}] [AppStore] ✓ Reviews fetch complete: {len(res_data['reviews'])} reviews")
 
     except Exception as e:
-        print(f"Error AppStore Dynamic: {e}")
+        print(f"[{now()}] [AppStore] CRITICAL ERROR: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+
+    print(f"[{now()}] [AppStore] Final result: rating={res_data['rating']}, reviews={len(res_data['reviews'])}")
     return res_data
 
 def fetch_playstore():
@@ -736,25 +805,47 @@ def fetch_google_news():
 def run_fetch_cycle():
     print(f"\n[{now()}] === STARTING GLOBAL FETCH CYCLE ===")
     try:
+        # Read previous data FIRST so we can fall back to it if a fetch fails
+        prev_data = {}
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, "r", encoding='utf-8') as f:
+                    prev_data = json.load(f)
+            except: prev_data = {}
+
         ast = fetch_appstore()
         pst = fetch_playstore()
         gns = fetch_google_news()
-        
+
         # Post-process: ensure all news posts have valid image URLs
         print(f"[{now()}] Post-processing news images...")
         posts = gns.get("posts", [])
         for i, post in enumerate(posts):
             print(f"  [{i+1}/{len(posts)}] Checking image for: {post.get('title', '')[:40]}...")
             _ensure_valid_image_url(post)
-        
-        # Merge instead of overwrite
-        data = {}
-        if os.path.exists(DATA_FILE):
-             try:
-                 with open(DATA_FILE, "r", encoding='utf-8') as f:
-                     data = json.load(f)
-             except: data = {}
 
+        # ── Preserve previous data when a fetch returns empty (e.g. rate-limited) ──
+        prev_appstore = prev_data.get("appstore", {})
+        if not ast.get("reviews") and prev_appstore.get("reviews"):
+            print(f"[{now()}] [AppStore] Fetch returned 0 reviews — preserving {len(prev_appstore['reviews'])} cached reviews")
+            ast["reviews"] = prev_appstore["reviews"]
+        if not ast.get("rating") and prev_appstore.get("rating"):
+            ast["rating"] = prev_appstore["rating"]
+
+        prev_playstore = prev_data.get("playstore", {})
+        if not pst.get("reviews") and prev_playstore.get("reviews"):
+            print(f"[{now()}] [PlayStore] Fetch returned 0 reviews — preserving {len(prev_playstore['reviews'])} cached reviews")
+            pst["reviews"] = prev_playstore["reviews"]
+        if not pst.get("rating") and prev_playstore.get("rating"):
+            pst["rating"] = prev_playstore["rating"]
+
+        prev_news = prev_data.get("google_news", {})
+        if not gns.get("posts") and prev_news.get("posts"):
+            print(f"[{now()}] [News] Fetch returned 0 posts — preserving {len(prev_news['posts'])} cached posts")
+            gns["posts"] = prev_news["posts"]
+
+        # Merge: start from previous data so twitter/other keys are preserved
+        data = prev_data
         data["last_updated"] = now()
         data["appstore"]     = ast
         data["playstore"]    = pst

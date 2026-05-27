@@ -65,7 +65,21 @@ export default defineConfig({
         target: 'http://127.0.0.1:5050',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/data.json': {
+        target: 'http://127.0.0.1:5050',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/data': {
+        target: 'http://127.0.0.1:5050',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/screenshots': {
+        target: 'http://127.0.0.1:5050',
+        changeOrigin: true,
+        secure: false,
       },
     },
   },

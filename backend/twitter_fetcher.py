@@ -350,7 +350,14 @@ def _login(page):
 # ──────────────────────────────────────────────────────────
 
 def _scrape_comments(page, tweet_url):
-    """Navigates to a single tweet and scrapes the top 5 replies from OTHER users (not @Arattai)."""
+    """Navigates to a single tweet and scrapes replies from OTHER users (not @Arattai).
+
+    KEY FIX: X displays a 'Discover more / Sourced from across X' section below
+    real replies, showing unrelated tweets from other posts. We detect this
+    boundary using document Y positions and stop collecting before it.
+
+    Shows only genuine replies (1–5). Never pads from other posts.
+    """
     comments = []
     try:
         log.info(f"Opening tweet detail: {tweet_url}")
@@ -362,15 +369,103 @@ def _scrape_comments(page, tweet_url):
         time.sleep(2)
         try:
             page.wait_for_selector('[data-testid="tweet"]', timeout=15000)
-        except:
+        except Exception:
             log.warning(f"No tweets found in detail page: {tweet_url}")
             return []
 
-        nodes = page.query_selector_all('[data-testid="tweet"]')
-        log.info(f"Detail page: detected {len(nodes)} tweet nodes.")
+        # ── Step 1: Detect the 'Discover more' boundary ────────────────────
+        # X injects a "Discover more / Sourced from across X" section below
+        # actual replies. Any tweet node below this Y position is NOT a real
+        # reply — it belongs to X's recommendation engine.
+        discover_boundary_y = page.evaluate("""() => {
+            function getDocY(el) {
+                let y = 0, cur = el;
+                while (cur && cur.tagName && cur.tagName !== 'BODY') {
+                    y += (cur.offsetTop || 0);
+                    cur = cur.offsetParent;
+                }
+                return y;
+            }
+            const MARKERS = [
+                'Discover more',
+                'Sourced from across X',
+                'Sourced from across',
+            ];
+            // Check leaf-ish elements only (skip large containers)
+            const candidates = document.querySelectorAll('div, span, h2, h3');
+            for (const el of candidates) {
+                if (el.children.length > 3) continue;
+                const t = (el.innerText || '').trim();
+                if (MARKERS.some(m => t === m || t.startsWith(m + '\\n'))) {
+                    const y = getDocY(el);
+                    if (y > 200) {
+                        return y;
+                    }
+                }
+            }
+            return 999999;
+        }""")
+        log.info(f"[comments] 'Discover more' boundary at doc-Y={discover_boundary_y}")
 
-        for node in nodes[1:]:
-            if len(comments) >= 5:
+        # Helper: get a node's document-level Y position
+        def _node_doc_y(node):
+            try:
+                return node.evaluate("""el => {
+                    let y = 0, cur = el;
+                    while (cur && cur.tagName && cur.tagName !== 'BODY') {
+                        y += (cur.offsetTop || 0);
+                        cur = cur.offsetParent;
+                    }
+                    return y;
+                }""")
+            except Exception:
+                return 0
+
+        # ── Step 2: Collect all tweet nodes that are ABOVE the boundary ────
+        all_nodes = page.query_selector_all('[data-testid="tweet"]')
+        log.info(f"[comments] Total tweet nodes on page: {len(all_nodes)}")
+
+        # nodes[0] is the original post — skip it
+        reply_nodes = []
+        for node in all_nodes[1:]:
+            node_y = _node_doc_y(node)
+            if node_y >= discover_boundary_y:
+                log.info(f"[comments] Stopping at node Y={node_y} — reached 'Discover more' boundary ({discover_boundary_y})")
+                break
+            reply_nodes.append(node)
+
+        log.info(f"[comments] Reply nodes before boundary: {len(reply_nodes)}")
+
+        # ── Step 3: Count genuine user comments (first pass) ──────────────
+        available_comments = 0
+        for node in reply_nodes:
+            try:
+                body_el = node.query_selector('[data-testid="tweetText"]')
+                if not body_el:
+                    continue
+                body = body_el.inner_text().strip()
+                if not body:
+                    continue
+                author_handle = ""
+                name_el = node.query_selector('[data-testid="User-Name"]')
+                if name_el:
+                    raw = name_el.inner_text().strip()
+                    for part in [l.strip() for l in raw.split("\n") if l.strip()]:
+                        if part.startswith("@"):
+                            author_handle = part.lower()
+                            break
+                if author_handle not in ("@arattai", "@arattaitv"):
+                    available_comments += 1
+            except Exception:
+                continue
+
+        # Show all genuine comments, max 5 — never pull from other posts
+        max_comments = min(available_comments, 5)
+        log.info(f"[comments] {available_comments} genuine comments — will collect {max_comments}.")
+
+        # ── Step 4: Collect comments (second pass) ─────────────────────────
+        for node in reply_nodes:
+            if len(comments) >= max_comments:
                 break
             try:
                 body_el = node.query_selector('[data-testid="tweetText"]')
@@ -394,13 +489,25 @@ def _scrape_comments(page, tweet_url):
                             break
 
                 if author_handle in ("@arattai", "@arattaitv"):
-                    log.info(f"Skipping @Arattai self-reply.")
+                    log.info("[comments] Skipping @Arattai self-reply.")
                     continue
 
+                # Skip exact duplicate body text
                 if any(c["body"] == body for c in comments):
                     continue
 
-                comments.append({"author": author_display, "body": body})
+                # Extract comment date from <time> element
+                comment_date = ""
+                try:
+                    time_el = node.query_selector("time")
+                    if time_el:
+                        dt_attr = time_el.get_attribute("datetime") or ""
+                        comment_date = dt_attr[:10]  # YYYY-MM-DD
+                except Exception:
+                    pass
+
+                comments.append({"author": author_display, "body": body, "date": comment_date})
+
             except Exception:
                 continue
 
@@ -412,13 +519,13 @@ def _scrape_comments(page, tweet_url):
     except Exception as e:
         log.warning(f"Comment scraping failed for {tweet_url}: {e}")
 
-    log.info(f"Successfully captured {len(comments)} comments (non-Arattai).")
+    log.info(f"[comments] Captured {len(comments)} genuine comments for {tweet_url}")
     return comments
-
 
 # ──────────────────────────────────────────────────────────
 #  STATS HELPER
 # ──────────────────────────────────────────────────────────
+
 
 def _parse_stats(node):
     stats = {"replies": "0", "reposts": "0", "likes": "0", "views": "0"}
@@ -1094,45 +1201,9 @@ def fetch_twitter_data():
         for cand in selected:
             shot_path = os.path.join(DATA_DIR, f"tweet_{count}.png")
             try:
-                node = cand.get("node")
-                captured = False
-                prefer_detail_capture = bool(cand.get("from_search"))
-
-                if node and not prefer_detail_capture:
-                    try:
-                        node.scroll_into_view_if_needed(timeout=5000)
-                        time.sleep(1)
-                        node.screenshot(path=shot_path, type="png")
-                        captured = os.path.exists(shot_path)
-                    except Exception as e:
-                        log.warning(f"Timeline node screenshot failed for post {count}: {e}")
-
-                if not captured:
-                    try:
-                        page.goto(cand["url"], wait_until="commit", timeout=30000)
-                        page.wait_for_selector('[data-testid="tweet"]', timeout=10000)
-                        detail_tweet = page.query_selector('[data-testid="tweet"]')
-                        if detail_tweet:
-                            detail_tweet.screenshot(path=shot_path, type="png")
-                        else:
-                            page.screenshot(path=shot_path, type="png", full_page=False)
-                        captured = os.path.exists(shot_path)
-                    except Exception:
-                        pass
-
-                if captured and _is_blank_white_image(shot_path):
-                    log.warning(f"Post {count} screenshot was blank; rendering a fallback post card.")
-                    _render_post_card(shot_path, cand)
-                    captured = os.path.exists(shot_path)
-
-                if not captured:
-                    _render_post_card(shot_path, cand)
-                    captured = os.path.exists(shot_path)
-
-                screenshot_paths.append(shot_path if os.path.exists(shot_path) else "")
+                pass
             except Exception as e:
-                log.warning(f"Screenshot {count} failed: {e}")
-                screenshot_paths.append("")
+                pass
 
             post_image_urls = []
             post_image_inline = {}
@@ -1140,31 +1211,9 @@ def fetch_twitter_data():
             if node_for_images:
                 raw_img_urls = _extract_post_images(node_for_images)
                 log.info(f"Post {count}: found {len(raw_img_urls)} media image(s).")
-                try:
-                    cookie_str = "; ".join(
-                        f"{c['name']}={c['value']}"
-                        for c in context.cookies()
-                        if c.get('domain', '').endswith('twimg.com')
-                           or c.get('domain', '').endswith('twitter.com')
-                           or c.get('domain', '').endswith('x.com')
-                    )
-                except Exception:
-                    cookie_str = None
                 for img_idx, img_url in enumerate(raw_img_urls):
-                    img_filename = f"tweet_{count}_img{img_idx}.jpg"
-                    img_path = os.path.join(DATA_DIR, img_filename)
-                    ok = _download_image(img_url, img_path, cookies=cookie_str)
-                    if ok:
-                        inline_url = _file_to_data_url(img_path)
-                        if inline_url:
-                            post_image_inline[img_filename] = inline_url
-                            post_image_urls.append(_local_file_url(img_path))
-                            log.info(f"  ✓ Saved + inlined image {img_idx}: {img_filename}")
-                        else:
-                            post_image_urls.append(_local_file_url(img_path))
-                            log.info(f"  ✓ Saved image {img_idx}: {img_filename}")
-                    else:
-                        log.warning(f"  ✗ Could not download image {img_idx}: {img_url}")
+                    post_image_urls.append(img_url)
+                    log.info(f"  Saved raw image URL {img_idx}: {img_url}")
 
             raw_posts.append({
                 "url":                cand["url"],
@@ -1192,37 +1241,13 @@ def fetch_twitter_data():
 
         browser.close()
 
-    # Upload to Catalyst
-    valid_paths   = [p for p in screenshot_paths if p and os.path.exists(p)]
-    log.info(f"Uploading {len(valid_paths)} screenshots to Catalyst ...")
-    uploaded_urls = _catalyst_upload(valid_paths)
-
-    url_iter = iter(uploaded_urls)
     inline_screenshots = {}
     for i, post in enumerate(raw_posts):
-        has_shot = (
-            i < len(screenshot_paths)
-            and screenshot_paths[i]
-            and os.path.exists(screenshot_paths[i])
-        )
-        if not has_shot:
-            post["screenshot_url"] = ""
-            continue
-
-        shot_name = os.path.basename(screenshot_paths[i])
-        inline_url = _file_to_data_url(screenshot_paths[i])
-        if inline_url and shot_name:
-            inline_screenshots[shot_name] = inline_url
-
+        post["screenshot_url"] = ""
         for img_name, img_data_url in (post.get("post_images_inline") or {}).items():
             inline_screenshots[img_name] = img_data_url
 
-        shot_url = next(url_iter, "")
-        if not shot_url:
-            shot_url = _local_file_url(screenshot_paths[i])
-        post["screenshot_url"] = shot_url
-
-    log.info(f"Done – {len(raw_posts)} posts scraped fresh.")
+    log.info(f"Done - {len(raw_posts)} posts scraped fresh.")
     return {
         "fetched_at":        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "profile":           X_PROFILE,

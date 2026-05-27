@@ -9,10 +9,11 @@ PORT = int(os.environ.get("X_ZOHO_CATALYST_LISTEN_PORT", os.environ.get("PORT", 
 print(f"[main] PORT={PORT} | sys.path={sys.path[:3]}", flush=True)
 
 # In Docker, Playwright is pre-installed at /app/pw-browsers (set in Dockerfile ENV).
-# setdefault keeps the Dockerfile ENV value if already set.
-os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/tmp/pw-browsers")
-os.environ.setdefault("XDG_CACHE_HOME", "/tmp/.cache")
-os.environ.setdefault("HOME", "/tmp")
+# On Windows (local dev) leave Playwright to find its own default AppData location.
+if os.name != 'nt':
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/tmp/pw-browsers")
+    os.environ.setdefault("XDG_CACHE_HOME", "/tmp/.cache")
+    os.environ.setdefault("HOME", "/tmp")
 
 _backend_dir = Path(__file__).resolve().parent
 
@@ -42,6 +43,22 @@ def _background_setup():
     """Runs after Flask is listening — waits for Playwright, copies session, starts schedulers."""
     import time
     import glob
+
+    # On Windows (local dev): Playwright is installed system-wide, skip the
+    # Linux /tmp/pw-browsers wait and go straight to starting the schedulers.
+    if os.name == 'nt':
+        print("[setup] Windows detected — skipping Chromium binary wait.", flush=True)
+        # Give Flask a moment to fully bind before starting heavy tasks
+        time.sleep(5)
+        try:
+            from server import start_background_scheduler
+            start_background_scheduler()
+            print("[setup] ✓ Schedulers started.", flush=True)
+        except Exception as e:
+            print(f"[setup] Schedulers failed: {e}", flush=True)
+        return
+
+    # ── Linux / Docker / Catalyst path below ──────────────────────────────
     # Give the server 30s to pass healthchecks before starting heavy browser tasks
     time.sleep(30)
 

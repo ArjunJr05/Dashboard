@@ -1,10 +1,10 @@
 <template>
-  <svg
-    class="emotion-face"
-    :class="'ef-' + emotionKey"
-    viewBox="0 0 60 60"
-    xmlns="http://www.w3.org/2000/svg"
-  >
+  <div :class="['glossy-container', 'ef-' + emotionKey]">
+    <svg
+      class="emotion-face"
+      viewBox="0 0 60 60"
+      xmlns="http://www.w3.org/2000/svg"
+    >
     <!-- Glow ring (emotion-coloured aura) -->
     <circle class="ef-glow" cx="30" cy="30" r="29" fill="none" stroke-width="2" opacity="0.35" />
 
@@ -89,6 +89,7 @@
       <path d="M27,9 L29,13 L26,16" class="ef-vein" stroke-width="1.5" stroke-linecap="round" fill="none"/>
     </g>
   </svg>
+  </div>
 </template>
 
 <script setup>
@@ -96,19 +97,38 @@ defineProps({ emotionKey: String })
 </script>
 
 <style scoped>
-.emotion-face {
-  width: 54px;
-  height: 54px;
-  filter: drop-shadow(0 4px 14px rgba(0,0,0,0.45));
-  overflow: visible;
+.glossy-container {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.3) 15%, transparent 40%),
+    radial-gradient(circle, currentColor 0%, currentColor 92%, rgba(0,0,0,0.15) 100%);
+  border-radius: 50%;
+  box-shadow:
+    0 12px 28px rgba(0,0,0,0.35),
+    inset -3px -3px 10px rgba(0,0,0,0.2),
+    inset 3px 3px 10px rgba(255,255,255,0.4);
 }
 
-/* ── Background & shared colours per emotion ── */
-.ef-ecstatic   { color: #FFD700; }
-.ef-happy      { color: #1db954; }
-.ef-neutral    { color: #7888cc; }
-.ef-frustrated { color: #ff6b35; }
-.ef-angry      { color: #ff2d78; }
+/* Emotion-specific colors */
+.glossy-container.ef-ecstatic   { color: #FFD700; }
+.glossy-container.ef-happy      { color: #1db954; }
+.glossy-container.ef-neutral    { color: #7888cc; }
+.glossy-container.ef-frustrated { color: #ff6b35; }
+.glossy-container.ef-angry      { color: #ff2d78; }
+
+.emotion-face {
+  width: 60px;
+  height: 60px;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.2));
+  overflow: visible;
+  z-index: 1;
+  position: relative;
+}
 
 .ef-bg      { fill: currentColor; }
 .ef-glow    { stroke: currentColor; }
